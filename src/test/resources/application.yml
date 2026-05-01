@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: switchwon-dev-be-homework
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create
+
+exchange-rate-api:
+  base-url: https://v6.exchangerate-api.com/v6
+  api-key: test-key
+  request-url: ${exchange-rate-api.base-url}/${exchange-rate-api.api-key}/latest/USD
+
+scheduler:
+  exchange-rate:
+    fixed-rate: 60000
+    initial-delay: 0
