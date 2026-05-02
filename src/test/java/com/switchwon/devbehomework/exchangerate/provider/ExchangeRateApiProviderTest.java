@@ -2,153 +2,114 @@ package com.switchwon.devbehomework.exchangerate.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.util.List;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Answers;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClient;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
+import com.switchwon.devbehomework.currency.CurrencyCode;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@TestPropertySource(properties = "scheduler.exchange-rate.initial-delay=999999999")
-@DisplayName("ExchangeRateApiProvider 테스트")
+@ExtendWith(MockitoExtension.class)
+@DisplayName("ExchangeRateApiProvider 단위 테스트")
 class ExchangeRateApiProviderTest {
 
-	@Autowired
+	@InjectMocks
 	private ExchangeRateApiProvider provider;
 
-	@Autowired
-	private RestTemplate restTemplate;
+	@Mock(answer = Answers.RETURNS_DEEP_STUBS)
+	private RestClient restClient;
 
-	@Value("${exchange-rate-api.request-url}")
-	private String requestUrl;
-
-	private MockRestServiceServer mockServer;
+	@Mock
+	private Clock clock;
 
 	@BeforeEach
 	void setUp() {
-		mockServer = MockRestServiceServer.bindTo(restTemplate).build();
+		ReflectionTestUtils.setField(provider, "requestUrl", "https://test.example.com/latest/USD");
 	}
 
 	@Nested
-	@DisplayName("fetchRates 메서드")
-	class FetchRates {
+	@DisplayName("fetchRate 메서드")
+	class FetchRate {
 
-		@Test
-		@DisplayName("외부 API 호출 성공 시 4개 통화의 환율을 반환한다")
-		void shouldReturnFourCurrencyRates() {
-			// given
-			String mockResponse = """
-				{
-					"result": "success",
-					"conversion_rates": {
-						"KRW": 1350.0,
-						"JPY": 150.0,
-						"CNY": 7.24,
-						"EUR": 0.92
-					}
-				}
-				""";
-			mockServer.expect(requestTo(requestUrl))
-				.andExpect(method(HttpMethod.GET))
-				.andRespond(withSuccess(mockResponse, MediaType.APPLICATION_JSON));
-
-			// when
-			List<ExchangeRateResponse> rates = provider.fetchRates();
-
-			// then
-			mockServer.verify();
-			assertThat(rates).hasSize(4);
+		@BeforeEach
+		void setUpClock() {
+			given(clock.instant()).willReturn(Instant.now());
+			given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
 		}
 
 		@Test
-		@DisplayName("매입율은 기준율보다 높고 매도율은 기준율보다 낮다")
-		void shouldApplySpreadCorrectly() {
+		@DisplayName("USD 환율 조회 시 KRW/USD 비율을 반환한다")
+		void shouldReturnUsdRate() {
 			// given
-			String mockResponse = """
-				{
-					"result": "success",
-					"conversion_rates": {
-						"KRW": 1350.0,
-						"JPY": 150.0,
-						"CNY": 7.24,
-						"EUR": 0.92
-					}
-				}
-				""";
-			mockServer.expect(requestTo(requestUrl))
-				.andRespond(withSuccess(mockResponse, MediaType.APPLICATION_JSON));
+			ExchangeRateApiProvider.ConversionRates rates = new ExchangeRateApiProvider.ConversionRates(
+				new BigDecimal("1350.0"), new BigDecimal("150.0"),
+				new BigDecimal("7.24"), new BigDecimal("0.92")
+			);
+			ExchangeRateApiProvider.ExchangeRateApiResponse mockResponse =
+				new ExchangeRateApiProvider.ExchangeRateApiResponse("success", rates);
+			when(restClient.get().uri(anyString()).retrieve()
+				.body(any(Class.class))).thenReturn(mockResponse);
 
 			// when
-			List<ExchangeRateResponse> rates = provider.fetchRates();
+			ProviderRate rate = provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW);
 
 			// then
-			rates.forEach(rate -> {
-				assertThat(rate.buyRate()).isGreaterThan(rate.tradeStanRate());
-				assertThat(rate.sellRate()).isLessThan(rate.tradeStanRate());
-			});
+			assertThat(rate.from()).isEqualTo(ForeignCurrency.USD);
+			assertThat(rate.to()).isEqualTo(CurrencyCode.KRW);
+			assertThat(rate.unitRate()).isEqualByComparingTo(new BigDecimal("1350.0"));
 		}
 
 		@Test
-		@DisplayName("JPY 환율은 100엔 단위로 환산된다")
-		void shouldCalculateJpyRateAs100YenUnit() {
+		@DisplayName("JPY 환율 조회 시 크로스레이트로 1엔당 원화를 계산한다")
+		void shouldCalculateJpyCrossRate() {
 			// given
-			// KRW: 1350.0 per USD, JPY: 150.0 per USD
-			// JPY base rate = (1350.0 / 150.0) * 100 = 900.00 (±0.5% 변동)
-			String mockResponse = """
-				{
-					"result": "success",
-					"conversion_rates": {
-						"KRW": 1350.0,
-						"JPY": 150.0,
-						"CNY": 7.24,
-						"EUR": 0.92
-					}
-				}
-				""";
-			mockServer.expect(requestTo(requestUrl))
-				.andRespond(withSuccess(mockResponse, MediaType.APPLICATION_JSON));
+			// KRW: 1350.0 per USD, JPY: 150.0 per USD → 1 JPY = 1350/150 = 9.00 KRW
+			ExchangeRateApiProvider.ConversionRates rates = new ExchangeRateApiProvider.ConversionRates(
+				new BigDecimal("1350.0"), new BigDecimal("150.0"),
+				new BigDecimal("7.24"), new BigDecimal("0.92")
+			);
+			ExchangeRateApiProvider.ExchangeRateApiResponse mockResponse =
+				new ExchangeRateApiProvider.ExchangeRateApiResponse("success", rates);
+			when(restClient.get().uri(anyString()).retrieve()
+				.body(any(Class.class))).thenReturn(mockResponse);
 
 			// when
-			List<ExchangeRateResponse> rates = provider.fetchRates();
+			ProviderRate rate = provider.fetchRate(ForeignCurrency.JPY, CurrencyCode.KRW);
 
 			// then
-			ExchangeRateResponse jpyRate = rates.stream()
-				.filter(rate -> rate.currencyCode() == CurrencyCode.JPY)
-				.findFirst()
-				.orElseThrow();
-			assertThat(jpyRate.tradeStanRate())
-				.isBetween(new BigDecimal("895.50"), new BigDecimal("904.50"));
+			// 1350 / 150 = 9.00 (1엔당 KRW, rateUnit 반영 전)
+			assertThat(rate.unitRate()).isEqualByComparingTo(new BigDecimal("9.0"));
 		}
 
 		@Test
 		@DisplayName("외부 API 서버 오류 시 BusinessException이 발생한다")
 		void shouldThrowExceptionWhenApiFails() {
 			// given
-			mockServer.expect(requestTo(requestUrl))
-				.andRespond(withServerError());
+			when(restClient.get().uri(anyString()).retrieve()
+				.body(any(Class.class))).thenThrow(new RuntimeException("Connection refused"));
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRates())
+			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -158,20 +119,39 @@ class ExchangeRateApiProviderTest {
 		@DisplayName("API 응답의 result가 success가 아니면 BusinessException이 발생한다")
 		void shouldThrowExceptionWhenResultIsNotSuccess() {
 			// given
-			String mockResponse = """
-				{
-					"result": "error",
-					"error-type": "invalid-key"
-				}
-				""";
-			mockServer.expect(requestTo(requestUrl))
-				.andRespond(withSuccess(mockResponse, MediaType.APPLICATION_JSON));
+			ExchangeRateApiProvider.ExchangeRateApiResponse errorResponse =
+				new ExchangeRateApiProvider.ExchangeRateApiResponse("error", null);
+			when(restClient.get().uri(anyString()).retrieve()
+				.body(any(Class.class))).thenReturn(errorResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRates())
+			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
 		}
+	}
+
+	@Nested
+	@DisplayName("supports 메서드")
+	class Supports {
+
+		@Test
+		@DisplayName("USD → KRW는 지원한다")
+		void shouldSupportUsdToKrw() {
+			assertThat(provider.supports(ForeignCurrency.USD, CurrencyCode.KRW)).isTrue();
+		}
+
+		@Test
+		@DisplayName("USD → USD는 지원하지 않는다")
+		void shouldNotSupportUsdToUsd() {
+			assertThat(provider.supports(ForeignCurrency.USD, CurrencyCode.USD)).isFalse();
+		}
+	}
+
+	@Test
+	@DisplayName("getName은 EXCHANGE_RATE_API를 반환한다")
+	void shouldReturnProviderName() {
+		assertThat(provider.getName()).isEqualTo("EXCHANGE_RATE_API");
 	}
 }

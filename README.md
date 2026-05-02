@@ -33,6 +33,7 @@ KRW 기준 외화 매수/매도 주문을 처리하는 백엔드 시스템입니
 
 > **외부 API 키**: ExchangeRate-API의 무료 키가 `application.yml`에 포함되어 있습니다.
 > 환경 변수(`EXCHANGE_RATE_API_KEY`)로 키를 교체할 수 있으며, 설정하지 않을 경우 내장 키를 사용합니다.
+> API 호출 실패 시 Frankfurter API → Mock Provider 순서로 fallback합니다.
 
 ### 테스트
 
@@ -76,8 +77,10 @@ src/main/java/com/switchwon/devbehomework
 ├── exchangerate
 │   ├── controller/     # GET /exchange-rate/latest
 │   ├── dto/            # ExchangeRateResponse, ExchangeRateListResponse
-│   ├── entity/         # ExchangeRateEntity (from/to/provider 포함)
-│   ├── provider/       # ExchangeRateProvider (인터페이스), ExchangeRateApiProvider
+│   ├── entity/         # ExchangeRateEntity
+│   ├── provider/       # ExchangeRateProvider (인터페이스), ProviderRate
+│   │                   # ExchangeRateApiProvider, FrankfurterExchangeRateProvider
+│   │                   # MockExchangeRateProvider, ProviderConfig
 │   ├── repository/     # ExchangeRateRepository
 │   └── service/        # ExchangeRateService
 ├── order
@@ -245,11 +248,21 @@ GET /order/list
 
 ### 환율 수집
 
-- ExchangeRate-API (`v6.exchangerate-api.com`) 연동, USD 기준 환율을 크로스 레이트로 계산하여 KRW 기준 환율로 변환
+- 3개 Provider를 우선순위 순서로 시도: ExchangeRate-API → Frankfurter → Mock
+- `application.yml`의 `exchange-rate.collection.providers` 설정으로 순서 제어
+- 각 Provider는 `supports(from, to)` 메서드로 처리 가능 여부를 명시
+- USD 기준 크로스 레이트 계산: `unitRate = KRW_per_USD / FOREIGN_per_USD`
 - JPY: 100엔 단위 환산 적용
 - 매 1분마다 스케줄러를 통해 환율 수집 및 DB 저장
-- API 호출 실패 시 에러 로그를 남기고 다음 주기에 재시도
 - 환율 데이터에 수집 출처(`provider`), 통화 방향(`fromCurrency`, `toCurrency`) 저장
+
+### Provider 구성
+
+| Provider | 설명 | 우선순위 |
+|----------|------|---------|
+| ExchangeRateApiProvider | ExchangeRate-API v6 연동 | 1순위 |
+| FrankfurterExchangeRateProvider | Frankfurter 공개 API 연동 | 2순위 |
+| MockExchangeRateProvider | 고정 환율 반환 (API 장애 대비) | 3순위 |
 
 ### 환율 계산 규칙
 
@@ -266,6 +279,7 @@ GET /order/list
 - **레이어드 아키텍처**: Controller → Service → Repository
 - **통화 타입 분리**: `CurrencyCode` (전체 통화) / `ForeignCurrency` (외화, rateUnit 포함)
 - **RestClient**: Spring Boot 3.2+ RestClient 사용, 3초 연결 / 5초 읽기 타임아웃
+- **BigDecimal**: 금융 연산 전체에 `BigDecimal` 사용, `double` 파싱 없음
 - **응답 DTO**: 불변 데이터는 Java Record 적용
 - **전역 예외 처리**: `BusinessException`, `MethodArgumentNotValidException`, `HttpMessageNotReadableException`
 
@@ -278,7 +292,7 @@ GET /order/list
 | Controller | `@WebMvcTest` | 매수/매도 주문, 유효성 실패, 주문 목록 조회 |
 | OrderService | `@ExtendWith(MockitoExtension.class)` | buyRate/sellRate 적용, KRW 버림 처리, 동일 통화 예외 |
 | ExchangeRateService | `@ExtendWith(MockitoExtension.class)` | 전체/단일 환율 조회, 환율 없을 시 예외 |
-| ExchangeRateApiProvider | `@ExtendWith(MockitoExtension.class)` | USD/JPY 크로스레이트, API 오류 처리 |
+| ExchangeRateApiProvider | `@ExtendWith(MockitoExtension.class)` | USD/JPY 크로스레이트, supports(), API 오류 처리 |
 
 ---
 
