@@ -2,15 +2,17 @@ package com.switchwon.devbehomework.order.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
+import com.switchwon.devbehomework.currency.CurrencyCode;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
 import com.switchwon.devbehomework.order.dto.OrderCreateResponse;
@@ -29,19 +31,22 @@ public class OrderService {
 
 	private final OrderRepository orderRepository;
 	private final ExchangeRateService exchangeRateService;
+	private final Clock clock;
 
 	@Transactional
 	public OrderCreateResponse createOrder(OrderRequest request) {
 		validateCurrencyPair(request.getFromCurrency(), request.getToCurrency());
 
 		boolean isBuy = request.getFromCurrency() == CurrencyCode.KRW;
-		CurrencyCode foreignCurrency = isBuy ? request.getToCurrency() : request.getFromCurrency();
+		CurrencyCode foreignCurrencyCode = isBuy ? request.getToCurrency() : request.getFromCurrency();
+		ForeignCurrency foreignCurrency = ForeignCurrency.valueOf(foreignCurrencyCode.name());
+
 		ExchangeRateResponse rate = exchangeRateService.getLatestRate(foreignCurrency);
 
 		BigDecimal tradeRate;
 		BigDecimal fromAmount;
 		BigDecimal toAmount;
-		int rateUnit = foreignCurrency.getForeignCurrency().getRateUnit();
+		int rateUnit = foreignCurrency.getRateUnit();
 
 		if (isBuy) {
 			tradeRate = rate.buyRate();
@@ -56,7 +61,7 @@ public class OrderService {
 		}
 
 		Order order = Order.of(fromAmount, request.getFromCurrency().name(),
-			toAmount, request.getToCurrency().name(), tradeRate, LocalDateTime.now());
+			toAmount, request.getToCurrency().name(), tradeRate, LocalDateTime.now(clock));
 
 		orderRepository.save(order);
 		return OrderCreateResponse.from(order);

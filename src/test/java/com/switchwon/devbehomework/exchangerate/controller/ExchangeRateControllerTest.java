@@ -17,9 +17,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateListResponse;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
@@ -45,7 +45,7 @@ class ExchangeRateControllerTest {
 			LocalDateTime now = LocalDateTime.now();
 			List<ExchangeRateResponse> rates = List.of(
 				ExchangeRateResponse.builder()
-					.currencyCode(CurrencyCode.USD)
+					.currencyCode(ForeignCurrency.USD)
 					.tradeStanRate(new BigDecimal("1350.00"))
 					.buyRate(new BigDecimal("1417.50"))
 					.sellRate(new BigDecimal("1282.50"))
@@ -77,13 +77,13 @@ class ExchangeRateControllerTest {
 			// given
 			LocalDateTime now = LocalDateTime.now();
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(CurrencyCode.USD)
+				.currencyCode(ForeignCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(now)
 				.build();
-			given(exchangeRateService.getLatestRate(CurrencyCode.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
 
 			// when & then
 			mockMvc.perform(get("/exchange-rate/latest/USD"))
@@ -105,7 +105,7 @@ class ExchangeRateControllerTest {
 		@DisplayName("환율 정보가 없는 통화를 조회하면 404를 반환한다")
 		void shouldReturn404WhenRateNotFound() throws Exception {
 			// given
-			given(exchangeRateService.getLatestRate(CurrencyCode.CNY))
+			given(exchangeRateService.getLatestRate(ForeignCurrency.CNY))
 				.willThrow(new BusinessException(ErrorCode.EXCHANGE_RATE_NOT_FOUND));
 
 			// when & then

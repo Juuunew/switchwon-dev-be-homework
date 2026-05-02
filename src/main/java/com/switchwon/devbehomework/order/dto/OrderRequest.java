@@ -2,7 +2,7 @@ package com.switchwon.devbehomework.order.dto;
 
 import java.math.BigDecimal;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
+import com.switchwon.devbehomework.currency.CurrencyCode;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;

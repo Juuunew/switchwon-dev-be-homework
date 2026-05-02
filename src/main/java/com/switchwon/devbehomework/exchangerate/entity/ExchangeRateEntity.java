@@ -3,7 +3,8 @@ package com.switchwon.devbehomework.exchangerate.entity;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
+import com.switchwon.devbehomework.currency.CurrencyCode;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,6 +13,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -20,17 +22,23 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "exchange_rate")
+@Table(name = "exchange_rate", indexes = {
+	@Index(name = "idx_er_from_to_datetime", columnList = "fromCurrency, toCurrency, dateTime")
+})
 @Entity
-public class ExchangeRate {
+public class ExchangeRateEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
-	private CurrencyCode currency;
+	@Column(nullable = false, length = 10)
+	private ForeignCurrency fromCurrency;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 10)
+	private CurrencyCode toCurrency;
 
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal baseRate;
@@ -41,27 +49,22 @@ public class ExchangeRate {
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal sellRate;
 
+	@Column(nullable = false, length = 50)
+	private String provider;
+
 	@Column(nullable = false)
-	private LocalDateTime collectedAt;
+	private LocalDateTime dateTime;
 
 	@Builder
-	public ExchangeRate(CurrencyCode currency, BigDecimal baseRate,
-		BigDecimal buyRate, BigDecimal sellRate, LocalDateTime collectedAt) {
-		this.currency = currency;
+	public ExchangeRateEntity(ForeignCurrency fromCurrency, CurrencyCode toCurrency,
+		BigDecimal baseRate, BigDecimal buyRate, BigDecimal sellRate,
+		String provider, LocalDateTime dateTime) {
+		this.fromCurrency = fromCurrency;
+		this.toCurrency = toCurrency;
 		this.baseRate = baseRate;
 		this.buyRate = buyRate;
 		this.sellRate = sellRate;
-		this.collectedAt = collectedAt;
-	}
-
-	public static ExchangeRate of(CurrencyCode currency, BigDecimal baseRate,
-		BigDecimal buyRate, BigDecimal sellRate, LocalDateTime collectedAt) {
-		return ExchangeRate.builder()
-			.currency(currency)
-			.baseRate(baseRate)
-			.buyRate(buyRate)
-			.sellRate(sellRate)
-			.collectedAt(collectedAt)
-			.build();
+		this.provider = provider;
+		this.dateTime = dateTime;
 	}
 }

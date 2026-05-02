@@ -76,7 +76,7 @@ src/main/java/com/switchwon/devbehomework
 ├── exchangerate
 │   ├── controller/     # GET /exchange-rate/latest
 │   ├── dto/            # ExchangeRateResponse, ExchangeRateListResponse
-│   ├── entity/         # ExchangeRate
+│   ├── entity/         # ExchangeRateEntity (from/to/provider 포함)
 │   ├── provider/       # ExchangeRateProvider (인터페이스), ExchangeRateApiProvider
 │   ├── repository/     # ExchangeRateRepository
 │   └── service/        # ExchangeRateService
@@ -249,6 +249,7 @@ GET /order/list
 - JPY: 100엔 단위 환산 적용
 - 매 1분마다 스케줄러를 통해 환율 수집 및 DB 저장
 - API 호출 실패 시 에러 로그를 남기고 다음 주기에 재시도
+- 환율 데이터에 수집 출처(`provider`), 통화 방향(`fromCurrency`, `toCurrency`) 저장
 
 ### 환율 계산 규칙
 

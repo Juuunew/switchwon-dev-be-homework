@@ -4,27 +4,27 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
-import com.switchwon.devbehomework.exchangerate.entity.ExchangeRate;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.exchangerate.entity.ExchangeRateEntity;
 
 import lombok.Builder;
 
 @Builder
 public record ExchangeRateResponse(
-	@JsonProperty("currency") CurrencyCode currencyCode,
+	@JsonProperty("currency") ForeignCurrency currencyCode,
 	BigDecimal tradeStanRate,
 	BigDecimal buyRate,
 	BigDecimal sellRate,
 	LocalDateTime dateTime
 ) {
 
-	public static ExchangeRateResponse from(ExchangeRate entity) {
+	public static ExchangeRateResponse from(ExchangeRateEntity entity) {
 		return ExchangeRateResponse.builder()
-			.currencyCode(entity.getCurrency())
+			.currencyCode(entity.getFromCurrency())
 			.tradeStanRate(entity.getBaseRate())
 			.buyRate(entity.getBuyRate())
 			.sellRate(entity.getSellRate())
-			.dateTime(entity.getCollectedAt())
+			.dateTime(entity.getDateTime())
 			.build();
 	}
 }

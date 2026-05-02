@@ -6,17 +6,19 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
-import com.switchwon.devbehomework.exchangerate.entity.ExchangeRate;
+import com.switchwon.devbehomework.currency.CurrencyCode;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.exchangerate.entity.ExchangeRateEntity;
 
-public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long> {
+public interface ExchangeRateRepository extends JpaRepository<ExchangeRateEntity, Long> {
 
-	Optional<ExchangeRate> findTopByCurrencyOrderByCollectedAtDesc(CurrencyCode currency);
+	Optional<ExchangeRateEntity> findTopByFromCurrencyAndToCurrencyOrderByDateTimeDesc(
+		ForeignCurrency fromCurrency, CurrencyCode toCurrency);
 
-	@Query("SELECT er FROM ExchangeRate er "
-		+ "WHERE er.collectedAt = ("
-		+ "  SELECT MAX(er2.collectedAt) FROM ExchangeRate er2 "
-		+ "  WHERE er2.currency = er.currency"
+	@Query("SELECT er FROM ExchangeRateEntity er "
+		+ "WHERE er.dateTime = ("
+		+ "  SELECT MAX(er2.dateTime) FROM ExchangeRateEntity er2 "
+		+ "  WHERE er2.fromCurrency = er.fromCurrency AND er2.toCurrency = er.toCurrency"
 		+ ")")
-	List<ExchangeRate> findLatestRatesForAllCurrencies();
+	List<ExchangeRateEntity> findLatestRatesForAllCurrencies();
 }

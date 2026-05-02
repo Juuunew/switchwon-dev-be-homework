@@ -2,9 +2,7 @@ package com.switchwon.devbehomework.exchangerate.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,12 +17,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
+import com.switchwon.devbehomework.currency.CurrencyCode;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateListResponse;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
-import com.switchwon.devbehomework.exchangerate.entity.ExchangeRate;
+import com.switchwon.devbehomework.exchangerate.entity.ExchangeRateEntity;
 import com.switchwon.devbehomework.exchangerate.repository.ExchangeRateRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,40 +37,6 @@ class ExchangeRateServiceTest {
 	private ExchangeRateRepository exchangeRateRepository;
 
 	@Nested
-	@DisplayName("saveRates 메서드")
-	class SaveRates {
-
-		@Test
-		@DisplayName("환율 목록을 전달하면 모든 환율이 저장된다")
-		void shouldSaveAllRates() {
-			// given
-			LocalDateTime now = LocalDateTime.now();
-			List<ExchangeRateResponse> rates = List.of(
-				ExchangeRateResponse.builder()
-					.currencyCode(CurrencyCode.USD)
-					.tradeStanRate(new BigDecimal("1350.00"))
-					.buyRate(new BigDecimal("1417.50"))
-					.sellRate(new BigDecimal("1282.50"))
-					.dateTime(now)
-					.build(),
-				ExchangeRateResponse.builder()
-					.currencyCode(CurrencyCode.EUR)
-					.tradeStanRate(new BigDecimal("1470.00"))
-					.buyRate(new BigDecimal("1543.50"))
-					.sellRate(new BigDecimal("1396.50"))
-					.dateTime(now)
-					.build()
-			);
-
-			// when
-			exchangeRateService.saveRates(rates);
-
-			// then
-			verify(exchangeRateRepository).saveAll(anyList());
-		}
-	}
-
-	@Nested
 	@DisplayName("getLatestRates 메서드")
 	class GetLatestRates {
 
@@ -80,20 +45,24 @@ class ExchangeRateServiceTest {
 		void shouldReturnLatestRatesForAllCurrencies() {
 			// given
 			LocalDateTime now = LocalDateTime.now();
-			List<ExchangeRate> entities = List.of(
-				ExchangeRate.builder()
-					.currency(CurrencyCode.USD)
+			List<ExchangeRateEntity> entities = List.of(
+				ExchangeRateEntity.builder()
+					.fromCurrency(ForeignCurrency.USD)
+					.toCurrency(CurrencyCode.KRW)
 					.baseRate(new BigDecimal("1350.00"))
 					.buyRate(new BigDecimal("1417.50"))
 					.sellRate(new BigDecimal("1282.50"))
-					.collectedAt(now)
+					.provider("MOCK")
+					.dateTime(now)
 					.build(),
-				ExchangeRate.builder()
-					.currency(CurrencyCode.JPY)
+				ExchangeRateEntity.builder()
+					.fromCurrency(ForeignCurrency.JPY)
+					.toCurrency(CurrencyCode.KRW)
 					.baseRate(new BigDecimal("900.00"))
 					.buyRate(new BigDecimal("945.00"))
 					.sellRate(new BigDecimal("855.00"))
-					.collectedAt(now)
+					.provider("MOCK")
+					.dateTime(now)
 					.build()
 			);
 			given(exchangeRateRepository.findLatestRatesForAllCurrencies()).willReturn(entities);
@@ -103,8 +72,8 @@ class ExchangeRateServiceTest {
 
 			// then
 			assertThat(response.exchangeRateList()).hasSize(2);
-			assertThat(response.exchangeRateList().get(0).currencyCode()).isEqualTo(CurrencyCode.USD);
-			assertThat(response.exchangeRateList().get(1).currencyCode()).isEqualTo(CurrencyCode.JPY);
+			assertThat(response.exchangeRateList().get(0).currencyCode()).isEqualTo(ForeignCurrency.USD);
+			assertThat(response.exchangeRateList().get(1).currencyCode()).isEqualTo(ForeignCurrency.JPY);
 		}
 
 		@Test
@@ -130,21 +99,23 @@ class ExchangeRateServiceTest {
 		void shouldReturnLatestRateForCurrency() {
 			// given
 			LocalDateTime now = LocalDateTime.now();
-			ExchangeRate entity = ExchangeRate.builder()
-				.currency(CurrencyCode.USD)
+			ExchangeRateEntity entity = ExchangeRateEntity.builder()
+				.fromCurrency(ForeignCurrency.USD)
+				.toCurrency(CurrencyCode.KRW)
 				.baseRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
-				.collectedAt(now)
+				.provider("MOCK")
+				.dateTime(now)
 				.build();
-			given(exchangeRateRepository.findTopByCurrencyOrderByCollectedAtDesc(CurrencyCode.USD))
-				.willReturn(Optional.of(entity));
+			given(exchangeRateRepository.findTopByFromCurrencyAndToCurrencyOrderByDateTimeDesc(
+				ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(Optional.of(entity));
 
 			// when
-			ExchangeRateResponse response = exchangeRateService.getLatestRate(CurrencyCode.USD);
+			ExchangeRateResponse response = exchangeRateService.getLatestRate(ForeignCurrency.USD);
 
 			// then
-			assertThat(response.currencyCode()).isEqualTo(CurrencyCode.USD);
+			assertThat(response.currencyCode()).isEqualTo(ForeignCurrency.USD);
 			assertThat(response.tradeStanRate()).isEqualByComparingTo(new BigDecimal("1350.00"));
 			assertThat(response.buyRate()).isEqualByComparingTo(new BigDecimal("1417.50"));
 			assertThat(response.sellRate()).isEqualByComparingTo(new BigDecimal("1282.50"));
@@ -155,11 +126,11 @@ class ExchangeRateServiceTest {
 		@DisplayName("환율 정보가 없으면 BusinessException이 발생한다")
 		void shouldThrowExceptionWhenRateNotFound() {
 			// given
-			given(exchangeRateRepository.findTopByCurrencyOrderByCollectedAtDesc(CurrencyCode.CNY))
-				.willReturn(Optional.empty());
+			given(exchangeRateRepository.findTopByFromCurrencyAndToCurrencyOrderByDateTimeDesc(
+				ForeignCurrency.CNY, CurrencyCode.KRW)).willReturn(Optional.empty());
 
 			// when & then
-			assertThatThrownBy(() -> exchangeRateService.getLatestRate(CurrencyCode.CNY))
+			assertThatThrownBy(() -> exchangeRateService.getLatestRate(ForeignCurrency.CNY))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXCHANGE_RATE_NOT_FOUND);

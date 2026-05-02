@@ -7,7 +7,10 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -18,9 +21,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.switchwon.devbehomework.common.enums.CurrencyCode;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
+import com.switchwon.devbehomework.currency.CurrencyCode;
+import com.switchwon.devbehomework.currency.ForeignCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
 import com.switchwon.devbehomework.order.dto.OrderCreateResponse;
@@ -42,6 +46,9 @@ class OrderServiceTest {
 	@Mock
 	private ExchangeRateService exchangeRateService;
 
+	@Mock
+	private Clock clock;
+
 	@Nested
 	@DisplayName("createOrder 메서드")
 	class CreateOrder {
@@ -50,19 +57,22 @@ class OrderServiceTest {
 		@DisplayName("KRW에서 USD로 매수 주문 시 buyRate를 적용하고 KRW 금액을 버림 처리한다")
 		void shouldApplyBuyRateWhenBuyingForeignCurrency() {
 			// given
+			given(clock.instant()).willReturn(Instant.now());
+			given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+
 			OrderRequest request = new OrderRequest(
 				new BigDecimal("100"),
 				CurrencyCode.KRW,
 				CurrencyCode.USD
 			);
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(CurrencyCode.USD)
+				.currencyCode(ForeignCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(CurrencyCode.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
 			given(orderRepository.save(any(Order.class))).willAnswer(invocation -> invocation.getArgument(0));
 
 			// when
@@ -81,19 +91,22 @@ class OrderServiceTest {
 		@DisplayName("USD에서 KRW로 매도 주문 시 sellRate를 적용하고 KRW 금액을 버림 처리한다")
 		void shouldApplySellRateWhenSellingForeignCurrency() {
 			// given
+			given(clock.instant()).willReturn(Instant.now());
+			given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+
 			OrderRequest request = new OrderRequest(
 				new BigDecimal("100"),
 				CurrencyCode.USD,
 				CurrencyCode.KRW
 			);
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(CurrencyCode.USD)
+				.currencyCode(ForeignCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(CurrencyCode.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
 			given(orderRepository.save(any(Order.class))).willAnswer(invocation -> invocation.getArgument(0));
 
 			// when
@@ -112,19 +125,22 @@ class OrderServiceTest {
 		@DisplayName("KRW 금액 계산 시 소수점 이하를 버림 처리한다")
 		void shouldFloorKrwAmount() {
 			// given
+			given(clock.instant()).willReturn(Instant.now());
+			given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+
 			OrderRequest request = new OrderRequest(
 				new BigDecimal("3"),
 				CurrencyCode.KRW,
 				CurrencyCode.USD
 			);
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(CurrencyCode.USD)
+				.currencyCode(ForeignCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(CurrencyCode.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
 			given(orderRepository.save(any(Order.class))).willAnswer(invocation -> invocation.getArgument(0));
 
 			// when
@@ -139,6 +155,9 @@ class OrderServiceTest {
 		@DisplayName("KRW에서 JPY로 매수 주문 시 100엔 단위 환율을 적용한다")
 		void shouldApplyRateUnitWhenBuyingJpy() {
 			// given
+			given(clock.instant()).willReturn(Instant.now());
+			given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+
 			// JPY tradeStanRate = 900 (100엔당 900원), buyRate = 945 (100엔당 945원)
 			OrderRequest request = new OrderRequest(
 				new BigDecimal("200"),
@@ -146,13 +165,13 @@ class OrderServiceTest {
 				CurrencyCode.JPY
 			);
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(CurrencyCode.JPY)
+				.currencyCode(ForeignCurrency.JPY)
 				.tradeStanRate(new BigDecimal("900.00"))
 				.buyRate(new BigDecimal("945.00"))
 				.sellRate(new BigDecimal("855.00"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(CurrencyCode.JPY)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(ForeignCurrency.JPY)).willReturn(rate);
 			given(orderRepository.save(any(Order.class))).willAnswer(invocation -> invocation.getArgument(0));
 
 			// when
@@ -169,6 +188,9 @@ class OrderServiceTest {
 		@DisplayName("JPY에서 KRW로 매도 주문 시 100엔 단위 환율을 적용한다")
 		void shouldApplyRateUnitWhenSellingJpy() {
 			// given
+			given(clock.instant()).willReturn(Instant.now());
+			given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+
 			// JPY tradeStanRate = 900 (100엔당 900원), sellRate = 855 (100엔당 855원)
 			OrderRequest request = new OrderRequest(
 				new BigDecimal("200"),
@@ -176,13 +198,13 @@ class OrderServiceTest {
 				CurrencyCode.KRW
 			);
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(CurrencyCode.JPY)
+				.currencyCode(ForeignCurrency.JPY)
 				.tradeStanRate(new BigDecimal("900.00"))
 				.buyRate(new BigDecimal("945.00"))
 				.sellRate(new BigDecimal("855.00"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(CurrencyCode.JPY)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(ForeignCurrency.JPY)).willReturn(rate);
 			given(orderRepository.save(any(Order.class))).willAnswer(invocation -> invocation.getArgument(0));
 
 			// when
