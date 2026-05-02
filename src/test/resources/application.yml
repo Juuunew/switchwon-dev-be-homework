@@ -15,7 +15,17 @@ exchange-rate-api:
   api-key: test-key
   request-url: ${exchange-rate-api.base-url}/${exchange-rate-api.api-key}/latest/USD
 
+exchange-rate:
+  collection:
+    providers: EXCHANGE_RATE_API,FRANKFURTER,MOCK
+  rate-freshness-minutes: 5
+  schedule:
+    fixed-delay: 60000
+    initial-delay: 999999999
+  frankfurter:
+    request-url: https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,JPY,CNY,EUR
+
 scheduler:
   exchange-rate:
     fixed-rate: 60000
-    initial-delay: 0
+    initial-delay: 999999999

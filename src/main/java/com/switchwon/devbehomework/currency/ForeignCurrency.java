@@ -1,4 +1,4 @@
-package com.switchwon.devbehomework.common.enums;
+package com.switchwon.devbehomework.currency;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
