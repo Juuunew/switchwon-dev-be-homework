@@ -33,7 +33,7 @@ KRW 기준 외화 매수/매도 주문을 처리하는 백엔드 시스템입니
 
 > **외부 API 키**: ExchangeRate-API의 무료 키가 `application.yml`에 포함되어 있습니다.
 > 환경 변수(`EXCHANGE_RATE_API_KEY`)로 키를 교체할 수 있으며, 설정하지 않을 경우 내장 키를 사용합니다.
-> API 호출 실패 시 Frankfurter API → Mock Provider 순서로 fallback합니다.
+> API 호출 실패 시 Frankfurter → Mock Provider 순서로 자동 fallback합니다.
 
 ### 테스트
 
@@ -75,6 +75,9 @@ src/main/java/com/switchwon/devbehomework
 ├── config/             # RestClientConfig, SchedulingConfig, SwaggerConfig
 ├── currency/           # CurrencyCode, ForeignCurrency
 ├── exchangerate
+│   ├── collection/     # ExchangeRateCollector (인터페이스)
+│   │                   # ProviderFallbackExchangeRateCollector
+│   │                   # ExchangeRateCollectionScheduler
 │   ├── controller/     # GET /exchange-rate/latest
 │   ├── dto/            # ExchangeRateResponse, ExchangeRateListResponse
 │   ├── entity/         # ExchangeRateEntity
@@ -83,13 +86,12 @@ src/main/java/com/switchwon/devbehomework
 │   │                   # MockExchangeRateProvider, ProviderConfig
 │   ├── repository/     # ExchangeRateRepository
 │   └── service/        # ExchangeRateService
-├── order
-│   ├── controller/     # POST /order, GET /order/list
-│   ├── dto/            # OrderRequest, OrderCreateResponse, OrderDetailResponse, OrderListResponse
-│   ├── entity/         # Order
-│   ├── repository/     # OrderRepository
-│   └── service/        # OrderService
-└── scheduler/          # ExchangeRateScheduler (1분 주기)
+└── order
+    ├── controller/     # POST /order, GET /order/list
+    ├── dto/            # OrderRequest, OrderCreateResponse, OrderDetailResponse, OrderListResponse
+    ├── entity/         # Order
+    ├── repository/     # OrderRepository
+    └── service/        # OrderService
 ```
 
 ---
@@ -147,7 +149,7 @@ GET /exchange-rate/latest
         "tradeStanRate": 1350.00,
         "buyRate": 1417.50,
         "sellRate": 1282.50,
-        "dateTime": "2026-05-02T18:00:00"
+        "dateTime": "2026-05-02T20:00:00"
       }
     ]
   }
@@ -202,7 +204,7 @@ POST /order
     "toAmount": 200,
     "toCurrency": "USD",
     "tradeRate": 1480.43,
-    "dateTime": "2026-05-02T18:00:00"
+    "dateTime": "2026-05-02T20:00:00"
   }
 }
 ```
@@ -231,7 +233,7 @@ POST /order
     "toAmount": 196104,
     "toCurrency": "KRW",
     "tradeRate": 1474.47,
-    "dateTime": "2026-05-02T18:00:00"
+    "dateTime": "2026-05-02T20:00:00"
   }
 }
 ```
@@ -246,15 +248,23 @@ GET /order/list
 
 ## 주요 구현 사항
 
-### 환율 수집
+### 환율 수집 구조
 
-- 3개 Provider를 우선순위 순서로 시도: ExchangeRate-API → Frankfurter → Mock
-- `application.yml`의 `exchange-rate.collection.providers` 설정으로 순서 제어
-- 각 Provider는 `supports(from, to)` 메서드로 처리 가능 여부를 명시
-- USD 기준 크로스 레이트 계산: `unitRate = KRW_per_USD / FOREIGN_per_USD`
-- JPY: 100엔 단위 환산 적용
-- 매 1분마다 스케줄러를 통해 환율 수집 및 DB 저장
-- 환율 데이터에 수집 출처(`provider`), 통화 방향(`fromCurrency`, `toCurrency`) 저장
+환율 수집은 `ExchangeRateCollector` 인터페이스를 통해 추상화되어 있으며,
+`ProviderFallbackExchangeRateCollector`가 통화별로 독립적인 fallback 수집을 담당합니다.
+
+```
+Scheduler → ExchangeRateCollector
+               └── ForeignCurrency.values() 순회
+                    └── 각 통화에 대해 Provider 순서대로 시도
+                         ├── ExchangeRateApiProvider (1순위)
+                         ├── FrankfurterExchangeRateProvider (2순위)
+                         └── MockExchangeRateProvider (3순위)
+```
+
+- 한 통화의 수집 실패가 다른 통화에 영향을 주지 않음
+- Provider 우선순위는 `exchange-rate.collection.providers` 설정으로 제어
+- 수집 주기: `fixedDelay` 방식 (이전 수집 완료 후 1분 대기)
 
 ### Provider 구성
 
@@ -268,20 +278,34 @@ GET /order/list
 
 | 항목 | 규칙 |
 |------|------|
-| 환율 소수점 | 둘째 자리까지 반올림 |
-| JPY 단위 | 100엔 기준 환산 |
+| 크로스레이트 | `unitRate = KRW_per_USD / FOREIGN_per_USD` |
+| 기준율 | `baseRate = unitRate × rateUnit` (JPY: ×100) |
+| 전신환 매입율 (buyRate) | `baseRate × 1.05` |
+| 전신환 매도율 (sellRate) | `baseRate × 0.95` |
 | KRW 환산 금액 | 소수점 이하 버림 (Floor) |
-| 전신환 매입율 (buyRate) | 매매기준율 × 1.05 |
-| 전신환 매도율 (sellRate) | 매매기준율 × 0.95 |
+| BigDecimal | 금융 연산 전체에 적용, double 파싱 없음 |
 
-### 설계
+### Sanity Check
 
-- **레이어드 아키텍처**: Controller → Service → Repository
-- **통화 타입 분리**: `CurrencyCode` (전체 통화) / `ForeignCurrency` (외화, rateUnit 포함)
-- **RestClient**: Spring Boot 3.2+ RestClient 사용, 3초 연결 / 5초 읽기 타임아웃
-- **BigDecimal**: 금융 연산 전체에 `BigDecimal` 사용, `double` 파싱 없음
-- **응답 DTO**: 불변 데이터는 Java Record 적용
-- **전역 예외 처리**: `BusinessException`, `MethodArgumentNotValidException`, `HttpMessageNotReadableException`
+수집된 환율이 직전 값 대비 일정 기준을 초과하면 이상 데이터로 판단합니다.
+
+| 변동폭 | 처리 |
+|--------|------|
+| 5% 이상 | WARN 로그 기록 후 저장 |
+| 15% 이상 | 해당 통화 수집 스킵 |
+
+### 설계 결정
+
+**`ExchangeRateCollector` 인터페이스 도입**
+
+Fallback 전략 자체를 교체 가능하도록 수집 계층을 인터페이스로 분리했습니다.
+Provider 목록을 Collector가 직접 보유하며, Scheduler는 `collectAll()`만 호출합니다.
+
+**Provider 단위 계약 (`supports()` + `fetchRate(from, to)`)**
+
+기존에 Provider가 전체 환율 목록을 반환하는 방식은 누락된 통화를 검증할 수 없는 문제가 있었습니다.
+통화쌍 단위로 `supports()` 체크 후 개별 요청하는 방식으로 변경하여,
+어떤 통화가 수집되지 않았는지 Collector 레벨에서 명확히 파악할 수 있습니다.
 
 ---
 
@@ -293,6 +317,7 @@ GET /order/list
 | OrderService | `@ExtendWith(MockitoExtension.class)` | buyRate/sellRate 적용, KRW 버림 처리, 동일 통화 예외 |
 | ExchangeRateService | `@ExtendWith(MockitoExtension.class)` | 전체/단일 환율 조회, 환율 없을 시 예외 |
 | ExchangeRateApiProvider | `@ExtendWith(MockitoExtension.class)` | USD/JPY 크로스레이트, supports(), API 오류 처리 |
+| ExchangeRateScheduler | `@ExtendWith(MockitoExtension.class)` | Collector 호출 검증 |
 
 ---
 
@@ -301,3 +326,4 @@ GET /order/list
 - H2 In-Memory DB 사용으로 애플리케이션 재시작 시 데이터 초기화됨
 - 인증/세션 미구현 (과제 요구사항에 따라 제외)
 - 지원 통화: `USD`, `JPY`, `CNY`, `EUR` (KRW 기준 주문만 가능)
+- 분산 환경에서의 스케줄러 중복 실행 방지 미적용 (단일 인스턴스 기준)
