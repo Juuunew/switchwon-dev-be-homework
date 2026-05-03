@@ -2,8 +2,7 @@ package com.switchwon.devbehomework.order.dto;
 
 import java.math.BigDecimal;
 
-import com.switchwon.devbehomework.currency.CurrencyCode;
-
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
@@ -19,9 +18,9 @@ public class OrderRequest {
 	@Positive(message = "거래 금액은 0보다 커야 합니다.")
 	private BigDecimal forexAmount;
 
-	@NotNull(message = "출발 통화는 필수입니다.")
-	private CurrencyCode fromCurrency;
+	@NotBlank(message = "출발 통화는 필수입니다.")
+	private String fromCurrency;
 
-	@NotNull(message = "도착 통화는 필수입니다.")
-	private CurrencyCode toCurrency;
+	@NotBlank(message = "도착 통화는 필수입니다.")
+	private String toCurrency;
 }

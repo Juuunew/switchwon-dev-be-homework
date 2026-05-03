@@ -1,13 +1,13 @@
 package com.switchwon.devbehomework.order.service;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
@@ -15,64 +15,104 @@ import com.switchwon.devbehomework.currency.CurrencyCode;
 import com.switchwon.devbehomework.currency.ForeignCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
-import com.switchwon.devbehomework.order.dto.OrderCreateResponse;
-import com.switchwon.devbehomework.order.dto.OrderDetailResponse;
 import com.switchwon.devbehomework.order.dto.OrderListResponse;
 import com.switchwon.devbehomework.order.dto.OrderRequest;
-import com.switchwon.devbehomework.order.entity.Order;
-import com.switchwon.devbehomework.order.repository.OrderRepository;
+import com.switchwon.devbehomework.order.dto.OrderResponse;
+import com.switchwon.devbehomework.order.entity.ExchangeOrderEntity;
+import com.switchwon.devbehomework.order.entity.ExchangeOrderRequestEntity;
+import com.switchwon.devbehomework.order.enums.OrderDirection;
+import com.switchwon.devbehomework.order.repository.ExchangeOrderRepository;
+import com.switchwon.devbehomework.order.repository.ExchangeOrderRequestRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 @Service
 public class OrderService {
 
-	private final OrderRepository orderRepository;
+	private final ExchangeOrderRequestRepository requestRepository;
+	private final ExchangeOrderRepository orderRepository;
 	private final ExchangeRateService exchangeRateService;
+	private final TransactionTemplate requiresNewTransactionTemplate;
 	private final Clock clock;
 
-	@Transactional
-	public OrderCreateResponse createOrder(OrderRequest request) {
-		validateCurrencyPair(request.getFromCurrency(), request.getToCurrency());
+	@Value("${exchange-rate.rate-freshness-minutes:5}")
+	private int rateFreshnessMinutes;
 
-		boolean isBuy = request.getFromCurrency() == CurrencyCode.KRW;
-		CurrencyCode foreignCurrencyCode = isBuy ? request.getToCurrency() : request.getFromCurrency();
-		ForeignCurrency foreignCurrency = ForeignCurrency.valueOf(foreignCurrencyCode.name());
+	public OrderResponse createOrder(OrderRequest request) {
+		LocalDateTime now = LocalDateTime.now(clock);
 
-		ExchangeRateResponse rate = exchangeRateService.getLatestRate(foreignCurrency);
+		ExchangeOrderRequestEntity orderRequest = requiresNewTransactionTemplate.execute(status ->
+			requestRepository.save(ExchangeOrderRequestEntity.received(
+				request.getForexAmount(), request.getFromCurrency(), request.getToCurrency(), now
+			))
+		);
 
-		BigDecimal tradeRate;
-		BigDecimal fromAmount;
-		BigDecimal toAmount;
-		int rateUnit = foreignCurrency.getRateUnit();
+		try {
+			return requiresNewTransactionTemplate.execute(status -> {
+				CurrencyCode fromCurrency = parseCurrency(request.getFromCurrency());
+				CurrencyCode toCurrency = parseCurrency(request.getToCurrency());
+				validateCurrencyPair(fromCurrency, toCurrency);
 
-		if (isBuy) {
-			tradeRate = rate.buyRate();
-			toAmount = request.getForexAmount();
-			fromAmount = request.getForexAmount().multiply(tradeRate)
-				.divide(BigDecimal.valueOf(rateUnit), 0, RoundingMode.FLOOR);
-		} else {
-			tradeRate = rate.sellRate();
-			fromAmount = request.getForexAmount();
-			toAmount = request.getForexAmount().multiply(tradeRate)
-				.divide(BigDecimal.valueOf(rateUnit), 0, RoundingMode.FLOOR);
+				boolean isBuy = fromCurrency == CurrencyCode.KRW;
+				ForeignCurrency foreignCurrency = ForeignCurrency.valueOf(
+					isBuy ? toCurrency.name() : fromCurrency.name()
+				);
+
+				ExchangeRateResponse rate = exchangeRateService.getLatestRate(foreignCurrency);
+
+				if (rate.dateTime().plusMinutes(rateFreshnessMinutes).isBefore(now)) {
+					throw new BusinessException(ErrorCode.RATE_STALE);
+				}
+
+				OrderDirection direction = isBuy ? OrderDirection.BUY : OrderDirection.SELL;
+				ExchangeOrderEntity order = ExchangeOrderEntity.create(
+					orderRequest.getId(), direction, foreignCurrency, request.getForexAmount(), rate, now
+				);
+				orderRepository.save(order);
+
+				orderRequest.markSucceeded(LocalDateTime.now(clock));
+				requestRepository.save(orderRequest);
+
+				log.info("주문 완료: direction={}, currency={}, forexAmount={}, tradeRate={}",
+					direction, foreignCurrency, request.getForexAmount(), order.getTradeRate());
+
+				return toResponse(order);
+			});
+		} catch (BusinessException e) {
+			requiresNewTransactionTemplate.execute(status -> {
+				orderRequest.markFailed(e.getErrorCode(), LocalDateTime.now(clock));
+				requestRepository.save(orderRequest);
+				return null;
+			});
+			throw e;
+		} catch (RuntimeException e) {
+			requiresNewTransactionTemplate.execute(status -> {
+				orderRequest.markFailed(ErrorCode.INTERNAL_ERROR, LocalDateTime.now(clock));
+				requestRepository.save(orderRequest);
+				return null;
+			});
+			throw e;
 		}
-
-		Order order = Order.of(fromAmount, request.getFromCurrency().name(),
-			toAmount, request.getToCurrency().name(), tradeRate, LocalDateTime.now(clock));
-
-		orderRepository.save(order);
-		return OrderCreateResponse.from(order);
 	}
 
 	public OrderListResponse getOrders() {
-		List<Order> orders = orderRepository.findAllByOrderByOrderedAtDesc();
-		List<OrderDetailResponse> responses = orders.stream()
-			.map(OrderDetailResponse::from)
+		List<ExchangeOrderEntity> orders = orderRepository.findAllByOrderByCreatedAtDesc();
+		List<OrderResponse> responses = orders.stream()
+			.map(this::toResponse)
 			.toList();
 		return OrderListResponse.from(responses);
+	}
+
+	private CurrencyCode parseCurrency(String code) {
+		try {
+			return CurrencyCode.valueOf(code);
+		} catch (IllegalArgumentException e) {
+			throw new BusinessException(ErrorCode.UNSUPPORTED_CURRENCY);
+		}
 	}
 
 	private void validateCurrencyPair(CurrencyCode fromCurrency, CurrencyCode toCurrency) {
@@ -82,5 +122,23 @@ public class OrderService {
 		if (fromCurrency != CurrencyCode.KRW && toCurrency != CurrencyCode.KRW) {
 			throw new BusinessException(ErrorCode.INVALID_CURRENCY_PAIR);
 		}
+	}
+
+	private OrderResponse toResponse(ExchangeOrderEntity order) {
+		boolean isBuy = order.getDirection() == OrderDirection.BUY;
+		if (isBuy) {
+			return new OrderResponse(
+				order.getId(),
+				order.getKrwAmount(), "KRW",
+				order.getForexAmount(), order.getCurrency().name(),
+				order.getTradeRate(), order.getCreatedAt()
+			);
+		}
+		return new OrderResponse(
+			order.getId(),
+			order.getForexAmount(), order.getCurrency().name(),
+			order.getKrwAmount(), "KRW",
+			order.getTradeRate(), order.getCreatedAt()
+		);
 	}
 }

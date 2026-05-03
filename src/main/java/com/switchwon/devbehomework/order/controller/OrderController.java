@@ -7,9 +7,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.switchwon.devbehomework.common.dto.ApiResponse;
-import com.switchwon.devbehomework.order.dto.OrderCreateResponse;
 import com.switchwon.devbehomework.order.dto.OrderListResponse;
 import com.switchwon.devbehomework.order.dto.OrderRequest;
+import com.switchwon.devbehomework.order.dto.OrderResponse;
 import com.switchwon.devbehomework.order.service.OrderService;
 
 import jakarta.validation.Valid;
@@ -23,7 +23,7 @@ public class OrderController {
 	private final OrderService orderService;
 
 	@PostMapping
-	public ApiResponse<OrderCreateResponse> createOrder(@Valid @RequestBody OrderRequest request) {
+	public ApiResponse<OrderResponse> createOrder(@Valid @RequestBody OrderRequest request) {
 		return ApiResponse.success(orderService.createOrder(request));
 	}
 

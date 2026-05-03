@@ -13,7 +13,8 @@ public enum ErrorCode {
 	EXTERNAL_API_ERROR(500, "외부 환율 API 호출에 실패했습니다."),
 	INVALID_REQUEST(400, "잘못된 요청입니다."),
 	RATE_STALE(503, "환율 정보가 만료되었습니다. 잠시 후 다시 시도해주세요."),
-	UNSUPPORTED_CURRENCY(400, "지원하지 않는 통화입니다.");
+	UNSUPPORTED_CURRENCY(400, "지원하지 않는 통화입니다."),
+	INTERNAL_ERROR(500, "서버 내부 오류가 발생했습니다.");
 
 	private final int code;
 	private final String message;
