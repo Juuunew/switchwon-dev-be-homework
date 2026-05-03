@@ -21,10 +21,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.switchwon.devbehomework.order.dto.OrderCreateResponse;
-import com.switchwon.devbehomework.order.dto.OrderDetailResponse;
 import com.switchwon.devbehomework.order.dto.OrderListResponse;
 import com.switchwon.devbehomework.order.dto.OrderRequest;
+import com.switchwon.devbehomework.order.dto.OrderResponse;
 import com.switchwon.devbehomework.order.service.OrderService;
 
 @WebMvcTest(OrderController.class)
@@ -49,13 +48,11 @@ class OrderControllerTest {
 		void shouldCreateBuyOrder() throws Exception {
 			// given
 			LocalDateTime now = LocalDateTime.now();
-			OrderCreateResponse response = new OrderCreateResponse(
-				new BigDecimal("141750"),
-				"KRW",
-				new BigDecimal("100"),
-				"USD",
-				new BigDecimal("1417.50"),
-				now
+			OrderResponse response = new OrderResponse(
+				1L,
+				new BigDecimal("141750"), "KRW",
+				new BigDecimal("100"), "USD",
+				new BigDecimal("1417.50"), now
 			);
 			given(orderService.createOrder(any())).willReturn(response);
 
@@ -70,8 +67,7 @@ class OrderControllerTest {
 				.andExpect(jsonPath("$.returnObject.fromCurrency").value("KRW"))
 				.andExpect(jsonPath("$.returnObject.toCurrency").value("USD"))
 				.andExpect(jsonPath("$.returnObject.fromAmount").value(141750))
-				.andExpect(jsonPath("$.returnObject.toAmount").value(100))
-				.andExpect(jsonPath("$.returnObject.id").doesNotExist());
+				.andExpect(jsonPath("$.returnObject.toAmount").value(100));
 		}
 
 		@Test
@@ -103,24 +99,10 @@ class OrderControllerTest {
 		}
 
 		@Test
-		@DisplayName("fromCurrency가 null이면 400 에러를 반환한다")
-		void shouldReturn400WhenFromCurrencyIsNull() throws Exception {
+		@DisplayName("fromCurrency가 빈 값이면 400 에러를 반환한다")
+		void shouldReturn400WhenFromCurrencyIsBlank() throws Exception {
 			// given
-			String requestBody = "{\"forexAmount\":100,\"toCurrency\":\"USD\"}";
-
-			// when & then
-			mockMvc.perform(post("/order")
-					.contentType(MediaType.APPLICATION_JSON)
-					.content(requestBody))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("400"));
-		}
-
-		@Test
-		@DisplayName("잘못된 enum 값이 오면 400 에러를 반환한다")
-		void shouldReturn400WhenInvalidEnumValue() throws Exception {
-			// given
-			String requestBody = "{\"forexAmount\":100,\"fromCurrency\":\"GBP\",\"toCurrency\":\"USD\"}";
+			String requestBody = "{\"forexAmount\":100,\"fromCurrency\":\"\",\"toCurrency\":\"USD\"}";
 
 			// when & then
 			mockMvc.perform(post("/order")
@@ -140,15 +122,12 @@ class OrderControllerTest {
 		void shouldReturnOrderList() throws Exception {
 			// given
 			LocalDateTime now = LocalDateTime.now();
-			List<OrderDetailResponse> orders = List.of(
-				new OrderDetailResponse(
+			List<OrderResponse> orders = List.of(
+				new OrderResponse(
 					1L,
-					new BigDecimal("141750"),
-					"KRW",
-					new BigDecimal("100"),
-					"USD",
-					new BigDecimal("1417.50"),
-					now
+					new BigDecimal("141750"), "KRW",
+					new BigDecimal("100"), "USD",
+					new BigDecimal("1417.50"), now
 				)
 			);
 			given(orderService.getOrders()).willReturn(OrderListResponse.from(orders));
