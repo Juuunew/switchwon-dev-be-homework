@@ -11,8 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
 import com.switchwon.devbehomework.order.dto.OrderListResponse;
@@ -50,16 +50,15 @@ public class OrderService {
 		);
 
 		try {
-			CurrencyCode fromCurrency = parseCurrency(request.getFromCurrency());
-			CurrencyCode toCurrency = parseCurrency(request.getToCurrency());
+			Currency fromCurrency = parseCurrency(request.getFromCurrency());
+			Currency toCurrency = parseCurrency(request.getToCurrency());
 			validateCurrencyPair(fromCurrency, toCurrency);
 
-			boolean isBuy = fromCurrency == CurrencyCode.KRW;
-			ForeignCurrency foreignCurrency = ForeignCurrency.from(
-				isBuy ? toCurrency : fromCurrency
-			);
+			boolean isBuy = fromCurrency == Currency.KRW;
+			Currency foreignCurrencyCode = isBuy ? toCurrency : fromCurrency;
+			RatedCurrency foreignCurrency = RatedCurrency.valueOf(foreignCurrencyCode.name());
 
-			ExchangeRateResponse rate = exchangeRateService.getLatestRate(foreignCurrency);
+			ExchangeRateResponse rate = exchangeRateService.getLatestRate(Currency.KRW, foreignCurrencyCode);
 
 			if (rate.dateTime().plusMinutes(rateFreshnessMinutes).isBefore(now)) {
 				throw new BusinessException(ErrorCode.RATE_STALE);
@@ -92,38 +91,24 @@ public class OrderService {
 		return OrderListResponse.from(responses);
 	}
 
-	private CurrencyCode parseCurrency(String code) {
+	private Currency parseCurrency(String code) {
 		try {
-			return CurrencyCode.valueOf(code);
+			return Currency.valueOf(code);
 		} catch (IllegalArgumentException e) {
 			throw new BusinessException(ErrorCode.UNSUPPORTED_CURRENCY);
 		}
 	}
 
-	private void validateCurrencyPair(CurrencyCode fromCurrency, CurrencyCode toCurrency) {
+	private void validateCurrencyPair(Currency fromCurrency, Currency toCurrency) {
 		if (fromCurrency == toCurrency) {
 			throw new BusinessException(ErrorCode.SAME_CURRENCY);
 		}
-		if (fromCurrency != CurrencyCode.KRW && toCurrency != CurrencyCode.KRW) {
+		if (fromCurrency != Currency.KRW && toCurrency != Currency.KRW) {
 			throw new BusinessException(ErrorCode.INVALID_CURRENCY_PAIR);
 		}
 	}
 
 	private OrderResponse toResponse(ExchangeOrderEntity order) {
-		boolean isBuy = order.getDirection() == OrderDirection.BUY;
-		if (isBuy) {
-			return new OrderResponse(
-				order.getId(),
-				order.getKrwAmount(), "KRW",
-				order.getForexAmount(), order.getCurrency().name(),
-				order.getTradeRate(), order.getCreatedAt()
-			);
-		}
-		return new OrderResponse(
-			order.getId(),
-			order.getForexAmount(), order.getCurrency().name(),
-			order.getKrwAmount(), "KRW",
-			order.getTradeRate(), order.getCreatedAt()
-		);
+		return OrderResponse.from(order);
 	}
 }

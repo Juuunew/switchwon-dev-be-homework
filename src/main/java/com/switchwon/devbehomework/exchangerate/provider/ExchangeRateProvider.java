@@ -1,13 +1,13 @@
 package com.switchwon.devbehomework.exchangerate.provider;
 
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 
 public interface ExchangeRateProvider {
 
-	ProviderRate fetchRate(ForeignCurrency from, CurrencyCode to);
+	ProviderRate fetchRate(RatedCurrency from, Currency to);
 
-	boolean supports(ForeignCurrency from, CurrencyCode to);
+	boolean supports(RatedCurrency from, Currency to);
 
 	String getName();
 }

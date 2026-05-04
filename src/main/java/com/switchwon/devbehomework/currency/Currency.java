@@ -1,6 +1,6 @@
 package com.switchwon.devbehomework.currency;
 
-public enum CurrencyCode {
+public enum Currency {
 
 	KRW,
 	USD,

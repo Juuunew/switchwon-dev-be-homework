@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.order.enums.OrderDirection;
 
@@ -40,7 +40,7 @@ public class ExchangeOrderEntity {
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 3)
-	private ForeignCurrency currency;
+	private RatedCurrency currency;
 
 	@Column(nullable = false, precision = 19, scale = 2)
 	private BigDecimal forexAmount;
@@ -59,7 +59,7 @@ public class ExchangeOrderEntity {
 
 	@Builder
 	private ExchangeOrderEntity(
-		Long requestId, OrderDirection direction, ForeignCurrency currency,
+		Long requestId, OrderDirection direction, RatedCurrency currency,
 		BigDecimal forexAmount, BigDecimal krwAmount, BigDecimal tradeRate,
 		LocalDateTime rateDateTime, LocalDateTime createdAt
 	) {
@@ -74,7 +74,7 @@ public class ExchangeOrderEntity {
 	}
 
 	public static ExchangeOrderEntity create(
-		Long requestId, OrderDirection direction, ForeignCurrency currency,
+		Long requestId, OrderDirection direction, RatedCurrency currency,
 		BigDecimal forexAmount, ExchangeRateResponse rate, LocalDateTime now
 	) {
 		BigDecimal tradeRate = direction == OrderDirection.BUY ? rate.buyRate() : rate.sellRate();

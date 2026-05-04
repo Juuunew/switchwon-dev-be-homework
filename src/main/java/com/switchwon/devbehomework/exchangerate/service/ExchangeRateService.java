@@ -1,40 +1,12 @@
 package com.switchwon.devbehomework.exchangerate.service;
 
-import java.util.List;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import com.switchwon.devbehomework.common.enums.ErrorCode;
-import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateListResponse;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
-import com.switchwon.devbehomework.exchangerate.entity.ExchangeRateEntity;
-import com.switchwon.devbehomework.exchangerate.repository.ExchangeRateRepository;
 
-import lombok.RequiredArgsConstructor;
+public interface ExchangeRateService {
 
-@RequiredArgsConstructor
-@Transactional(readOnly = true)
-@Service
-public class ExchangeRateService {
+	ExchangeRateListResponse getLatestRates(Currency from);
 
-	private final ExchangeRateRepository exchangeRateRepository;
-
-	public ExchangeRateListResponse getLatestRates() {
-		List<ExchangeRateEntity> entities = exchangeRateRepository.findLatestRatesForAllCurrencies();
-		List<ExchangeRateResponse> responses = entities.stream()
-			.map(ExchangeRateResponse::from)
-			.toList();
-		return ExchangeRateListResponse.from(responses);
-	}
-
-	public ExchangeRateResponse getLatestRate(ForeignCurrency from) {
-		ExchangeRateEntity entity = exchangeRateRepository
-			.findTopByFromCurrencyAndToCurrencyOrderByDateTimeDesc(from, CurrencyCode.KRW)
-			.orElseThrow(() -> new BusinessException(ErrorCode.EXCHANGE_RATE_NOT_FOUND));
-		return ExchangeRateResponse.from(entity);
-	}
+	ExchangeRateResponse getLatestRate(Currency from, Currency to);
 }

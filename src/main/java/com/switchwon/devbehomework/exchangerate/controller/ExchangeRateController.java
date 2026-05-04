@@ -6,7 +6,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.switchwon.devbehomework.common.dto.ApiResponse;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateListResponse;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
@@ -22,11 +23,11 @@ public class ExchangeRateController {
 
 	@GetMapping("/latest")
 	public ApiResponse<ExchangeRateListResponse> getLatestRates() {
-		return ApiResponse.success(exchangeRateService.getLatestRates());
+		return ApiResponse.success(exchangeRateService.getLatestRates(Currency.KRW));
 	}
 
 	@GetMapping("/latest/{currency}")
-	public ApiResponse<ExchangeRateResponse> getLatestRate(@PathVariable ForeignCurrency currency) {
-		return ApiResponse.success(exchangeRateService.getLatestRate(currency));
+	public ApiResponse<ExchangeRateResponse> getLatestRate(@PathVariable RatedCurrency currency) {
+		return ApiResponse.success(exchangeRateService.getLatestRate(Currency.KRW, Currency.valueOf(currency.name())));
 	}
 }

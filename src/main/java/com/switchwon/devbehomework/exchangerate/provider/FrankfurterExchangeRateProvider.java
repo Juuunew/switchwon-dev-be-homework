@@ -10,8 +10,8 @@ import org.springframework.web.client.RestClient;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +41,7 @@ public class FrankfurterExchangeRateProvider implements ExchangeRateProvider {
 		@JsonProperty("CNY") BigDecimal cny,
 		@JsonProperty("EUR") BigDecimal eur
 	) {
-		BigDecimal ratePerUsd(ForeignCurrency currency) {
+		BigDecimal ratePerUsd(RatedCurrency currency) {
 			return switch (currency) {
 				case USD -> BigDecimal.ONE;
 				case JPY -> jpy;
@@ -52,7 +52,7 @@ public class FrankfurterExchangeRateProvider implements ExchangeRateProvider {
 	}
 
 	@Override
-	public ProviderRate fetchRate(ForeignCurrency from, CurrencyCode to) {
+	public ProviderRate fetchRate(RatedCurrency from, Currency to) {
 		FrankfurterResponse response;
 		try {
 			response = restClient.get().uri(frankfurterUrl).retrieve()
@@ -75,8 +75,8 @@ public class FrankfurterExchangeRateProvider implements ExchangeRateProvider {
 	}
 
 	@Override
-	public boolean supports(ForeignCurrency from, CurrencyCode to) {
-		return to == CurrencyCode.KRW;
+	public boolean supports(RatedCurrency from, Currency to) {
+		return to == Currency.KRW;
 	}
 
 	@Override

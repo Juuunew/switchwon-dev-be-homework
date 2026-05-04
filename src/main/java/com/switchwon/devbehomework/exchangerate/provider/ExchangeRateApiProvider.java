@@ -12,8 +12,8 @@ import org.springframework.web.client.RestClient;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,7 +51,7 @@ public class ExchangeRateApiProvider implements ExchangeRateProvider {
 		 * 해당 외화의 USD 대비 환율 (= foreignPerUsd).
 		 * USD 자신은 1로 처리해 크로스레이트 계산을 통일한다.
 		 */
-		BigDecimal ratePerUsd(ForeignCurrency currency) {
+		BigDecimal ratePerUsd(RatedCurrency currency) {
 			return switch (currency) {
 				case USD -> BigDecimal.ONE;
 				case JPY -> jpy;
@@ -62,7 +62,7 @@ public class ExchangeRateApiProvider implements ExchangeRateProvider {
 	}
 
 	@Override
-	public ProviderRate fetchRate(ForeignCurrency from, CurrencyCode to) {
+	public ProviderRate fetchRate(RatedCurrency from, Currency to) {
 		ConversionRates rates = getApiResponse().conversionRates();
 		BigDecimal krwPerUsd = requirePositiveRate("KRW", rates.krw());
 		BigDecimal foreignPerUsd = requirePositiveRate(from.name(), rates.ratePerUsd(from));
@@ -71,8 +71,8 @@ public class ExchangeRateApiProvider implements ExchangeRateProvider {
 	}
 
 	@Override
-	public boolean supports(ForeignCurrency from, CurrencyCode to) {
-		return to == CurrencyCode.KRW;
+	public boolean supports(RatedCurrency from, Currency to) {
+		return to == Currency.KRW;
 	}
 
 	@Override
