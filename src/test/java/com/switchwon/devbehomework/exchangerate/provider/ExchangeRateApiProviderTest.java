@@ -130,6 +130,62 @@ class ExchangeRateApiProviderTest {
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
 		}
+
+		@Test
+		@DisplayName("API 응답에 conversion_rates가 없으면 BusinessException이 발생한다")
+		void shouldThrowExceptionWhenConversionRatesIsMissing() {
+			// given
+			ExchangeRateApiProvider.ExchangeRateApiResponse invalidResponse =
+				new ExchangeRateApiProvider.ExchangeRateApiResponse("success", null);
+			when(restClient.get().uri(anyString()).retrieve()
+				.body(any(Class.class))).thenReturn(invalidResponse);
+
+			// when & then
+			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+				.isInstanceOf(BusinessException.class)
+				.extracting(ex -> ((BusinessException)ex).getErrorCode())
+				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
+		}
+
+		@Test
+		@DisplayName("API 응답에 대상 통화 환율이 없으면 BusinessException이 발생한다")
+		void shouldThrowExceptionWhenTargetCurrencyRateIsMissing() {
+			// given
+			ExchangeRateApiProvider.ConversionRates rates = new ExchangeRateApiProvider.ConversionRates(
+				new BigDecimal("1350.0"), null,
+				new BigDecimal("7.24"), new BigDecimal("0.92")
+			);
+			ExchangeRateApiProvider.ExchangeRateApiResponse invalidResponse =
+				new ExchangeRateApiProvider.ExchangeRateApiResponse("success", rates);
+			when(restClient.get().uri(anyString()).retrieve()
+				.body(any(Class.class))).thenReturn(invalidResponse);
+
+			// when & then
+			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.JPY, CurrencyCode.KRW))
+				.isInstanceOf(BusinessException.class)
+				.extracting(ex -> ((BusinessException)ex).getErrorCode())
+				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
+		}
+
+		@Test
+		@DisplayName("API 응답의 환율이 0이면 BusinessException이 발생한다")
+		void shouldThrowExceptionWhenRateIsZero() {
+			// given
+			ExchangeRateApiProvider.ConversionRates rates = new ExchangeRateApiProvider.ConversionRates(
+				BigDecimal.ZERO, new BigDecimal("150.0"),
+				new BigDecimal("7.24"), new BigDecimal("0.92")
+			);
+			ExchangeRateApiProvider.ExchangeRateApiResponse invalidResponse =
+				new ExchangeRateApiProvider.ExchangeRateApiResponse("success", rates);
+			when(restClient.get().uri(anyString()).retrieve()
+				.body(any(Class.class))).thenReturn(invalidResponse);
+
+			// when & then
+			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+				.isInstanceOf(BusinessException.class)
+				.extracting(ex -> ((BusinessException)ex).getErrorCode())
+				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
+		}
 	}
 
 	@Nested

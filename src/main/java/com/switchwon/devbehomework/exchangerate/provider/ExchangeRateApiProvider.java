@@ -30,7 +30,7 @@ public class ExchangeRateApiProvider implements ExchangeRateProvider {
 	private final RestClient restClient;
 	private final Clock clock;
 
-	@Value("${exchange-rate-api.request-url}")
+	@Value("${exchange-rate.providers.exchange-rate-api.request-url}")
 	private String requestUrl;
 
 	private volatile ExchangeRateApiResponse rateCache;
@@ -64,7 +64,9 @@ public class ExchangeRateApiProvider implements ExchangeRateProvider {
 	@Override
 	public ProviderRate fetchRate(ForeignCurrency from, CurrencyCode to) {
 		ConversionRates rates = getApiResponse().conversionRates();
-		BigDecimal unitRate = rates.krw().divide(rates.ratePerUsd(from), 10, RoundingMode.HALF_UP);
+		BigDecimal krwPerUsd = requirePositiveRate("KRW", rates.krw());
+		BigDecimal foreignPerUsd = requirePositiveRate(from.name(), rates.ratePerUsd(from));
+		BigDecimal unitRate = krwPerUsd.divide(foreignPerUsd, 10, RoundingMode.HALF_UP);
 		return new ProviderRate(from, to, unitRate);
 	}
 
@@ -94,7 +96,8 @@ public class ExchangeRateApiProvider implements ExchangeRateProvider {
 			throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
 		}
 
-		if (response == null || !"success".equals(response.result())) {
+		if (response == null || !"success".equals(response.result())
+			|| response.conversionRates() == null) {
 			log.error("ExchangeRateAPI 응답 오류: result={}", response != null ? response.result() : "null");
 			throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
 		}
@@ -102,5 +105,13 @@ public class ExchangeRateApiProvider implements ExchangeRateProvider {
 		rateCache = response;
 		cacheTime = now;
 		return response;
+	}
+
+	private BigDecimal requirePositiveRate(String rateName, BigDecimal rate) {
+		if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) {
+			log.error("ExchangeRateAPI 응답 환율 무효: {}={}", rateName, rate);
+			throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+		}
+		return rate;
 	}
 }

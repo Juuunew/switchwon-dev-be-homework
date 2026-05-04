@@ -27,7 +27,7 @@ public class FrankfurterExchangeRateProvider implements ExchangeRateProvider {
 
 	private final RestClient restClient;
 
-	@Value("${exchange-rate.frankfurter.request-url}")
+	@Value("${exchange-rate.providers.frankfurter.request-url}")
 	private String frankfurterUrl;
 
 	record FrankfurterResponse(
@@ -62,13 +62,15 @@ public class FrankfurterExchangeRateProvider implements ExchangeRateProvider {
 			throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
 		}
 
-		if (response == null || response.rates() == null || response.rates().krw() == null) {
-			log.error("Frankfurter API 응답 형식 오류 또는 KRW 환율 없음");
+		if (response == null || response.rates() == null) {
+			log.error("Frankfurter API 응답 형식 오류");
 			throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
 		}
 
 		Rates rates = response.rates();
-		BigDecimal unitRate = rates.krw().divide(rates.ratePerUsd(from), 10, RoundingMode.HALF_UP);
+		BigDecimal krwPerUsd = requirePositiveRate("KRW", rates.krw());
+		BigDecimal foreignPerUsd = requirePositiveRate(from.name(), rates.ratePerUsd(from));
+		BigDecimal unitRate = krwPerUsd.divide(foreignPerUsd, 10, RoundingMode.HALF_UP);
 		return new ProviderRate(from, to, unitRate);
 	}
 
@@ -80,5 +82,13 @@ public class FrankfurterExchangeRateProvider implements ExchangeRateProvider {
 	@Override
 	public String getName() {
 		return "FRANKFURTER";
+	}
+
+	private BigDecimal requirePositiveRate(String rateName, BigDecimal rate) {
+		if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) {
+			log.error("Frankfurter API 응답 환율 무효: {}={}", rateName, rate);
+			throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+		}
+		return rate;
 	}
 }

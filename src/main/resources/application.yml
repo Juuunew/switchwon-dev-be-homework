@@ -18,22 +18,19 @@ spring:
       hibernate:
         format_sql: true
 
-exchange-rate-api:
-  base-url: https://v6.exchangerate-api.com/v6
-  api-key: ${EXCHANGE_RATE_API_KEY:1e684ecef600734c8239ff5d}
-  request-url: ${exchange-rate-api.base-url}/${exchange-rate-api.api-key}/latest/USD
-
 exchange-rate:
+  initial-collection:
+    enabled: true
   collection:
     providers: EXCHANGE_RATE_API,FRANKFURTER,MOCK
   rate-freshness-minutes: 5
   schedule:
     fixed-delay: 60000
-    initial-delay: 0
-  frankfurter:
-    request-url: https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,JPY,CNY,EUR
-
-scheduler:
-  exchange-rate:
-    fixed-rate: 60000
-    initial-delay: 0
+    initial-delay: 60000
+  providers:
+    exchange-rate-api:
+      base-url: https://v6.exchangerate-api.com/v6
+      api-key: ${EXCHANGE_RATE_API_KEY:1e684ecef600734c8239ff5d}
+      request-url: ${exchange-rate.providers.exchange-rate-api.base-url}/${exchange-rate.providers.exchange-rate-api.api-key}/latest/USD
+    frankfurter:
+      request-url: https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,JPY,CNY,EUR

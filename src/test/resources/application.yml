@@ -10,22 +10,19 @@ spring:
     hibernate:
       ddl-auto: create
 
-exchange-rate-api:
-  base-url: https://v6.exchangerate-api.com/v6
-  api-key: test-key
-  request-url: ${exchange-rate-api.base-url}/${exchange-rate-api.api-key}/latest/USD
-
 exchange-rate:
+  initial-collection:
+    enabled: false
   collection:
     providers: EXCHANGE_RATE_API,FRANKFURTER,MOCK
   rate-freshness-minutes: 5
   schedule:
     fixed-delay: 60000
     initial-delay: 999999999
-  frankfurter:
-    request-url: https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,JPY,CNY,EUR
-
-scheduler:
-  exchange-rate:
-    fixed-rate: 60000
-    initial-delay: 999999999
+  providers:
+    exchange-rate-api:
+      base-url: https://v6.exchangerate-api.com/v6
+      api-key: test-key
+      request-url: ${exchange-rate.providers.exchange-rate-api.base-url}/${exchange-rate.providers.exchange-rate-api.api-key}/latest/USD
+    frankfurter:
+      request-url: https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,JPY,CNY,EUR
