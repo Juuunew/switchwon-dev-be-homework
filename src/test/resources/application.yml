@@ -16,6 +16,11 @@ exchange-rate:
   collection:
     providers: EXCHANGE_RATE_API,FRANKFURTER,MOCK
   rate-freshness-minutes: 5
+  spread-buy: 1.05
+  spread-sell: 0.95
+  sanity-check:
+    warn-threshold: 0.05
+    skip-threshold: 0.15
   schedule:
     fixed-delay: 60000
     initial-delay: 999999999

@@ -1,4 +1,4 @@
-package com.switchwon.devbehomework.scheduler;
+package com.switchwon.devbehomework.exchangerate.collection;
 
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -12,12 +12,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.exchangerate.collection.ExchangeRateCollectionScheduler;
-import com.switchwon.devbehomework.exchangerate.collection.ExchangeRateCollector;
-
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ExchangeRateCollectionScheduler 단위 테스트")
-class ExchangeRateSchedulerTest {
+class ExchangeRateCollectionSchedulerTest {
 
 	@InjectMocks
 	private ExchangeRateCollectionScheduler scheduler;

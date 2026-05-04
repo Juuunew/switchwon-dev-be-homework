@@ -26,8 +26,8 @@ import org.springframework.web.client.RestClient;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ExchangeRateApiProvider 단위 테스트")
@@ -71,11 +71,11 @@ class ExchangeRateApiProviderTest {
 				.body(any(Class.class))).thenReturn(mockResponse);
 
 			// when
-			ProviderRate rate = provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW);
+			ProviderRate rate = provider.fetchRate(RatedCurrency.USD, Currency.KRW);
 
 			// then
-			assertThat(rate.from()).isEqualTo(ForeignCurrency.USD);
-			assertThat(rate.to()).isEqualTo(CurrencyCode.KRW);
+			assertThat(rate.from()).isEqualTo(RatedCurrency.USD);
+			assertThat(rate.to()).isEqualTo(Currency.KRW);
 			assertThat(rate.unitRate()).isEqualByComparingTo(new BigDecimal("1350.0"));
 		}
 
@@ -94,7 +94,7 @@ class ExchangeRateApiProviderTest {
 				.body(any(Class.class))).thenReturn(mockResponse);
 
 			// when
-			ProviderRate rate = provider.fetchRate(ForeignCurrency.JPY, CurrencyCode.KRW);
+			ProviderRate rate = provider.fetchRate(RatedCurrency.JPY, Currency.KRW);
 
 			// then
 			// 1350 / 150 = 9.00 (1엔당 KRW, rateUnit 반영 전)
@@ -109,7 +109,7 @@ class ExchangeRateApiProviderTest {
 				.body(any(Class.class))).thenThrow(new RuntimeException("Connection refused"));
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -125,7 +125,7 @@ class ExchangeRateApiProviderTest {
 				.body(any(Class.class))).thenReturn(errorResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -141,7 +141,7 @@ class ExchangeRateApiProviderTest {
 				.body(any(Class.class))).thenReturn(invalidResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -161,7 +161,7 @@ class ExchangeRateApiProviderTest {
 				.body(any(Class.class))).thenReturn(invalidResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.JPY, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.JPY, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -181,7 +181,7 @@ class ExchangeRateApiProviderTest {
 				.body(any(Class.class))).thenReturn(invalidResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -195,13 +195,13 @@ class ExchangeRateApiProviderTest {
 		@Test
 		@DisplayName("USD → KRW는 지원한다")
 		void shouldSupportUsdToKrw() {
-			assertThat(provider.supports(ForeignCurrency.USD, CurrencyCode.KRW)).isTrue();
+			assertThat(provider.supports(RatedCurrency.USD, Currency.KRW)).isTrue();
 		}
 
 		@Test
 		@DisplayName("USD → USD는 지원하지 않는다")
 		void shouldNotSupportUsdToUsd() {
-			assertThat(provider.supports(ForeignCurrency.USD, CurrencyCode.USD)).isFalse();
+			assertThat(provider.supports(RatedCurrency.USD, Currency.USD)).isFalse();
 		}
 	}
 

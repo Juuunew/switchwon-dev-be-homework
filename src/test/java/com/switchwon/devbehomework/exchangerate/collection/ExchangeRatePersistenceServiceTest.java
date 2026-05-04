@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,10 +19,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
-import com.switchwon.devbehomework.exchangerate.entity.ExchangeRateEntity;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
+import com.switchwon.devbehomework.exchangerate.entity.ExchangeRateHistoryEntity;
 import com.switchwon.devbehomework.exchangerate.provider.ProviderRate;
 import com.switchwon.devbehomework.exchangerate.repository.ExchangeRateRepository;
 
@@ -35,6 +37,14 @@ class ExchangeRatePersistenceServiceTest {
 	@Mock
 	private ExchangeRateRepository exchangeRateRepository;
 
+	@BeforeEach
+	void setUp() {
+		ReflectionTestUtils.setField(persistenceService, "spreadBuy", new BigDecimal("1.05"));
+		ReflectionTestUtils.setField(persistenceService, "spreadSell", new BigDecimal("0.95"));
+		ReflectionTestUtils.setField(persistenceService, "warnThreshold", new BigDecimal("0.05"));
+		ReflectionTestUtils.setField(persistenceService, "skipThreshold", new BigDecimal("0.15"));
+	}
+
 	@Nested
 	@DisplayName("saveIfValid 메서드")
 	class SaveIfValid {
@@ -45,19 +55,22 @@ class ExchangeRatePersistenceServiceTest {
 			// given
 			givenNoPreviousRate();
 			ProviderRate providerRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1350")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1350")
 			);
 
 			// when
-			boolean result = persistenceService.saveIfValid(providerRate, "PRIMARY", LocalDateTime.now());
+			Optional<SavedExchangeRate> result = persistenceService.saveIfValid(
+				providerRate, "PRIMARY", LocalDateTime.now()
+			);
 
 			// then
-			assertThat(result).isTrue();
+			assertThat(result).isPresent();
+			assertThat(result.get().currency()).isEqualTo(RatedCurrency.USD);
 
-			ArgumentCaptor<ExchangeRateEntity> captor = ArgumentCaptor.forClass(ExchangeRateEntity.class);
+			ArgumentCaptor<ExchangeRateHistoryEntity> captor = ArgumentCaptor.forClass(ExchangeRateHistoryEntity.class);
 			verify(exchangeRateRepository).save(captor.capture());
 
-			ExchangeRateEntity saved = captor.getValue();
+			ExchangeRateHistoryEntity saved = captor.getValue();
 			assertThat(saved.getBaseRate()).isEqualByComparingTo(new BigDecimal("1350.00"));
 			assertThat(saved.getBuyRate()).isEqualByComparingTo(new BigDecimal("1417.50"));
 			assertThat(saved.getSellRate()).isEqualByComparingTo(new BigDecimal("1282.50"));
@@ -70,19 +83,22 @@ class ExchangeRatePersistenceServiceTest {
 			// given
 			givenNoPreviousRate();
 			ProviderRate providerRate = new ProviderRate(
-				ForeignCurrency.JPY, CurrencyCode.KRW, new BigDecimal("9.00")
+				RatedCurrency.JPY, Currency.KRW, new BigDecimal("9.00")
 			);
 
 			// when
-			boolean result = persistenceService.saveIfValid(providerRate, "PRIMARY", LocalDateTime.now());
+			Optional<SavedExchangeRate> result = persistenceService.saveIfValid(
+				providerRate, "PRIMARY", LocalDateTime.now()
+			);
 
 			// then
-			assertThat(result).isTrue();
+			assertThat(result).isPresent();
+			assertThat(result.get().currency()).isEqualTo(RatedCurrency.JPY);
 
-			ArgumentCaptor<ExchangeRateEntity> captor = ArgumentCaptor.forClass(ExchangeRateEntity.class);
+			ArgumentCaptor<ExchangeRateHistoryEntity> captor = ArgumentCaptor.forClass(ExchangeRateHistoryEntity.class);
 			verify(exchangeRateRepository).save(captor.capture());
 
-			ExchangeRateEntity saved = captor.getValue();
+			ExchangeRateHistoryEntity saved = captor.getValue();
 			assertThat(saved.getBaseRate()).isEqualByComparingTo(new BigDecimal("900.00"));
 			assertThat(saved.getBuyRate()).isEqualByComparingTo(new BigDecimal("945.00"));
 			assertThat(saved.getSellRate()).isEqualByComparingTo(new BigDecimal("855.00"));
@@ -92,13 +108,15 @@ class ExchangeRatePersistenceServiceTest {
 		@DisplayName("unitRate가 null이면 저장하지 않는다")
 		void shouldNotSaveWhenUnitRateIsNull() {
 			// given
-			ProviderRate providerRate = new ProviderRate(ForeignCurrency.USD, CurrencyCode.KRW, null);
+			ProviderRate providerRate = new ProviderRate(RatedCurrency.USD, Currency.KRW, null);
 
 			// when
-			boolean result = persistenceService.saveIfValid(providerRate, "PRIMARY", LocalDateTime.now());
+			Optional<SavedExchangeRate> result = persistenceService.saveIfValid(
+				providerRate, "PRIMARY", LocalDateTime.now()
+			);
 
 			// then
-			assertThat(result).isFalse();
+			assertThat(result).isEmpty();
 			verify(exchangeRateRepository, never()).save(any());
 		}
 
@@ -107,14 +125,16 @@ class ExchangeRatePersistenceServiceTest {
 		void shouldNotSaveWhenUnitRateIsNotPositive() {
 			// given
 			ProviderRate providerRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, BigDecimal.ZERO
+				RatedCurrency.USD, Currency.KRW, BigDecimal.ZERO
 			);
 
 			// when
-			boolean result = persistenceService.saveIfValid(providerRate, "PRIMARY", LocalDateTime.now());
+			Optional<SavedExchangeRate> result = persistenceService.saveIfValid(
+				providerRate, "PRIMARY", LocalDateTime.now()
+			);
 
 			// then
-			assertThat(result).isFalse();
+			assertThat(result).isEmpty();
 			verify(exchangeRateRepository, never()).save(any());
 		}
 
@@ -122,9 +142,9 @@ class ExchangeRatePersistenceServiceTest {
 		@DisplayName("변동폭 15% 이상이면 저장하지 않는다")
 		void shouldNotSaveWhenChangeExceedsSkipThreshold() {
 			// given
-			ExchangeRateEntity prevEntity = ExchangeRateEntity.builder()
-				.fromCurrency(ForeignCurrency.USD)
-				.toCurrency(CurrencyCode.KRW)
+			ExchangeRateHistoryEntity prevEntity = ExchangeRateHistoryEntity.builder()
+				.fromCurrency(RatedCurrency.USD)
+				.toCurrency(Currency.KRW)
 				.baseRate(new BigDecimal("1000.00"))
 				.buyRate(new BigDecimal("1050.00"))
 				.sellRate(new BigDecimal("950.00"))
@@ -132,17 +152,19 @@ class ExchangeRatePersistenceServiceTest {
 				.dateTime(LocalDateTime.now())
 				.build();
 			given(exchangeRateRepository.findTopByFromCurrencyAndToCurrencyOrderByDateTimeDesc(
-				ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(Optional.of(prevEntity));
+				RatedCurrency.USD, Currency.KRW)).willReturn(Optional.of(prevEntity));
 
 			ProviderRate providerRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1200")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1200")
 			);
 
 			// when
-			boolean result = persistenceService.saveIfValid(providerRate, "PRIMARY", LocalDateTime.now());
+			Optional<SavedExchangeRate> result = persistenceService.saveIfValid(
+				providerRate, "PRIMARY", LocalDateTime.now()
+			);
 
 			// then
-			assertThat(result).isFalse();
+			assertThat(result).isEmpty();
 			verify(exchangeRateRepository, never()).save(any());
 		}
 
@@ -150,9 +172,9 @@ class ExchangeRatePersistenceServiceTest {
 		@DisplayName("변동폭 5% 미만이면 저장한다")
 		void shouldSaveWhenChangeIsBelowWarnThreshold() {
 			// given
-			ExchangeRateEntity prevEntity = ExchangeRateEntity.builder()
-				.fromCurrency(ForeignCurrency.USD)
-				.toCurrency(CurrencyCode.KRW)
+			ExchangeRateHistoryEntity prevEntity = ExchangeRateHistoryEntity.builder()
+				.fromCurrency(RatedCurrency.USD)
+				.toCurrency(Currency.KRW)
 				.baseRate(new BigDecimal("1000.00"))
 				.buyRate(new BigDecimal("1050.00"))
 				.sellRate(new BigDecimal("950.00"))
@@ -160,17 +182,20 @@ class ExchangeRatePersistenceServiceTest {
 				.dateTime(LocalDateTime.now())
 				.build();
 			given(exchangeRateRepository.findTopByFromCurrencyAndToCurrencyOrderByDateTimeDesc(
-				ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(Optional.of(prevEntity));
+				RatedCurrency.USD, Currency.KRW)).willReturn(Optional.of(prevEntity));
+			given(exchangeRateRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
 
 			ProviderRate providerRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1030")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1030")
 			);
 
 			// when
-			boolean result = persistenceService.saveIfValid(providerRate, "PRIMARY", LocalDateTime.now());
+			Optional<SavedExchangeRate> result = persistenceService.saveIfValid(
+				providerRate, "PRIMARY", LocalDateTime.now()
+			);
 
 			// then
-			assertThat(result).isTrue();
+			assertThat(result).isPresent();
 			verify(exchangeRateRepository).save(any());
 		}
 	}
@@ -178,5 +203,6 @@ class ExchangeRatePersistenceServiceTest {
 	private void givenNoPreviousRate() {
 		given(exchangeRateRepository.findTopByFromCurrencyAndToCurrencyOrderByDateTimeDesc(any(), any()))
 			.willReturn(Optional.empty());
+		given(exchangeRateRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
 	}
 }

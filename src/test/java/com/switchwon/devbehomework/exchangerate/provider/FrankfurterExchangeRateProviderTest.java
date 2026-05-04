@@ -22,8 +22,8 @@ import org.springframework.web.client.RestClient;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("FrankfurterExchangeRateProvider 단위 테스트")
@@ -58,7 +58,7 @@ class FrankfurterExchangeRateProviderTest {
 				.body(any(Class.class))).thenReturn(mockResponse);
 
 			// when
-			ProviderRate rate = provider.fetchRate(ForeignCurrency.JPY, CurrencyCode.KRW);
+			ProviderRate rate = provider.fetchRate(RatedCurrency.JPY, Currency.KRW);
 
 			// then
 			assertThat(rate.unitRate()).isEqualByComparingTo(new BigDecimal("9.0"));
@@ -74,7 +74,7 @@ class FrankfurterExchangeRateProviderTest {
 				.body(any(Class.class))).thenReturn(invalidResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -94,7 +94,7 @@ class FrankfurterExchangeRateProviderTest {
 				.body(any(Class.class))).thenReturn(invalidResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.JPY, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.JPY, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
@@ -114,7 +114,7 @@ class FrankfurterExchangeRateProviderTest {
 				.body(any(Class.class))).thenReturn(invalidResponse);
 
 			// when & then
-			assertThatThrownBy(() -> provider.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			assertThatThrownBy(() -> provider.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.EXTERNAL_API_ERROR);

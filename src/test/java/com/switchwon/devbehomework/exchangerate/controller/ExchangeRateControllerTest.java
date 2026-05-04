@@ -19,7 +19,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateListResponse;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
@@ -45,14 +46,14 @@ class ExchangeRateControllerTest {
 			LocalDateTime now = LocalDateTime.now();
 			List<ExchangeRateResponse> rates = List.of(
 				ExchangeRateResponse.builder()
-					.currencyCode(ForeignCurrency.USD)
+					.currencyCode(RatedCurrency.USD)
 					.tradeStanRate(new BigDecimal("1350.00"))
 					.buyRate(new BigDecimal("1417.50"))
 					.sellRate(new BigDecimal("1282.50"))
 					.dateTime(now)
 					.build()
 			);
-			given(exchangeRateService.getLatestRates()).willReturn(ExchangeRateListResponse.from(rates));
+			given(exchangeRateService.getLatestRates(Currency.KRW)).willReturn(ExchangeRateListResponse.from(rates));
 
 			// when & then
 			mockMvc.perform(get("/exchange-rate/latest"))
@@ -77,13 +78,13 @@ class ExchangeRateControllerTest {
 			// given
 			LocalDateTime now = LocalDateTime.now();
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(ForeignCurrency.USD)
+				.currencyCode(RatedCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(now)
 				.build();
-			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.USD)).willReturn(rate);
 
 			// when & then
 			mockMvc.perform(get("/exchange-rate/latest/USD"))
@@ -95,7 +96,7 @@ class ExchangeRateControllerTest {
 
 		@Test
 		@DisplayName("유효하지 않은 통화 코드로 조회하면 400을 반환한다")
-		void shouldReturn400WhenInvalidCurrencyCode() throws Exception {
+		void shouldReturn400WhenInvalidCurrency() throws Exception {
 			mockMvc.perform(get("/exchange-rate/latest/INVALID"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("400"));
@@ -105,7 +106,7 @@ class ExchangeRateControllerTest {
 		@DisplayName("환율 정보가 없는 통화를 조회하면 404를 반환한다")
 		void shouldReturn404WhenRateNotFound() throws Exception {
 			// given
-			given(exchangeRateService.getLatestRate(ForeignCurrency.CNY))
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.CNY))
 				.willThrow(new BusinessException(ErrorCode.EXCHANGE_RATE_NOT_FOUND));
 
 			// when & then

@@ -33,7 +33,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
 import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.service.ExchangeRateService;
 import com.switchwon.devbehomework.order.dto.OrderListResponse;
@@ -80,17 +81,17 @@ class OrderServiceTest {
 
 		@Test
 		@DisplayName("KRW → USD 매수 주문 시 buyRate 적용")
-		void shouldApplyBuyRateWhenBuyingForeignCurrency() {
+		void shouldApplyBuyRateWhenBuyingRatedCurrency() {
 			// given
 			OrderRequest request = new OrderRequest(new BigDecimal("100"), "KRW", "USD");
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(ForeignCurrency.USD)
+				.currencyCode(RatedCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.USD)).willReturn(rate);
 
 			// when
 			OrderResponse response = orderService.createOrder(request);
@@ -105,17 +106,17 @@ class OrderServiceTest {
 
 		@Test
 		@DisplayName("USD → KRW 매도 주문 시 sellRate 적용")
-		void shouldApplySellRateWhenSellingForeignCurrency() {
+		void shouldApplySellRateWhenSellingRatedCurrency() {
 			// given
 			OrderRequest request = new OrderRequest(new BigDecimal("100"), "USD", "KRW");
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(ForeignCurrency.USD)
+				.currencyCode(RatedCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.USD)).willReturn(rate);
 
 			// when
 			OrderResponse response = orderService.createOrder(request);
@@ -134,13 +135,13 @@ class OrderServiceTest {
 			// 3 * 1417.50 = 4252.50 → floor → 4252
 			OrderRequest request = new OrderRequest(new BigDecimal("3"), "KRW", "USD");
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(ForeignCurrency.USD)
+				.currencyCode(RatedCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.USD)).willReturn(rate);
 
 			// when
 			OrderResponse response = orderService.createOrder(request);
@@ -156,13 +157,13 @@ class OrderServiceTest {
 			// 200엔 * 945원/100엔 = 1890원
 			OrderRequest request = new OrderRequest(new BigDecimal("200"), "KRW", "JPY");
 			ExchangeRateResponse rate = ExchangeRateResponse.builder()
-				.currencyCode(ForeignCurrency.JPY)
+				.currencyCode(RatedCurrency.JPY)
 				.tradeStanRate(new BigDecimal("900.00"))
 				.buyRate(new BigDecimal("945.00"))
 				.sellRate(new BigDecimal("855.00"))
 				.dateTime(LocalDateTime.now())
 				.build();
-			given(exchangeRateService.getLatestRate(ForeignCurrency.JPY)).willReturn(rate);
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.JPY)).willReturn(rate);
 
 			// when
 			OrderResponse response = orderService.createOrder(request);
@@ -217,13 +218,13 @@ class OrderServiceTest {
 			// given: 10분 전 환율 (freshness=5분 초과)
 			OrderRequest request = new OrderRequest(new BigDecimal("100"), "KRW", "USD");
 			ExchangeRateResponse staleRate = ExchangeRateResponse.builder()
-				.currencyCode(ForeignCurrency.USD)
+				.currencyCode(RatedCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now().minusMinutes(10))
 				.build();
-			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(staleRate);
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.USD)).willReturn(staleRate);
 
 			// when & then
 			assertThatThrownBy(() -> orderService.createOrder(request))
@@ -243,13 +244,13 @@ class OrderServiceTest {
 			// given: 10분 전 환율로 RATE_STALE 유발
 			OrderRequest request = new OrderRequest(new BigDecimal("100"), "KRW", "USD");
 			ExchangeRateResponse staleRate = ExchangeRateResponse.builder()
-				.currencyCode(ForeignCurrency.USD)
+				.currencyCode(RatedCurrency.USD)
 				.tradeStanRate(new BigDecimal("1350.00"))
 				.buyRate(new BigDecimal("1417.50"))
 				.sellRate(new BigDecimal("1282.50"))
 				.dateTime(LocalDateTime.now().minusMinutes(10))
 				.build();
-			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(staleRate);
+			given(exchangeRateService.getLatestRate(Currency.KRW, Currency.USD)).willReturn(staleRate);
 
 			// when & then
 			assertThatThrownBy(() -> orderService.createOrder(request))

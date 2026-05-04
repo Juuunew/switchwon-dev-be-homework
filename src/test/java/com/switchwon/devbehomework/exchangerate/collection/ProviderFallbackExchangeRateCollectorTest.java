@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,10 +24,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-import com.switchwon.devbehomework.currency.CurrencyCode;
-import com.switchwon.devbehomework.currency.ForeignCurrency;
+import com.switchwon.devbehomework.currency.Currency;
+import com.switchwon.devbehomework.currency.RatedCurrency;
+import com.switchwon.devbehomework.exchangerate.dto.ExchangeRateResponse;
 import com.switchwon.devbehomework.exchangerate.provider.ExchangeRateProvider;
 import com.switchwon.devbehomework.exchangerate.provider.ProviderRate;
+import com.switchwon.devbehomework.exchangerate.service.InMemoryExchangeRateService;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -43,6 +46,9 @@ class ProviderFallbackExchangeRateCollectorTest {
 	private ExchangeRatePersistenceService persistenceService;
 
 	@Mock
+	private InMemoryExchangeRateService inMemoryExchangeRateService;
+
+	@Mock
 	private Clock clock;
 
 	private ProviderFallbackExchangeRateCollector collector;
@@ -56,13 +62,14 @@ class ProviderFallbackExchangeRateCollectorTest {
 
 		given(primary.supports(any(), any())).willReturn(false);
 		given(fallback.supports(any(), any())).willReturn(false);
-		given(primary.supports(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(true);
-		given(fallback.supports(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(true);
+		given(primary.supports(RatedCurrency.USD, Currency.KRW)).willReturn(true);
+		given(fallback.supports(RatedCurrency.USD, Currency.KRW)).willReturn(true);
 
-		given(persistenceService.saveIfValid(any(), any(), any())).willReturn(true);
+		given(persistenceService.saveIfValid(any(), any(), any()))
+			.willReturn(Optional.of(savedRate(RatedCurrency.USD)));
 
 		collector = new ProviderFallbackExchangeRateCollector(
-			List.of(primary, fallback), persistenceService, clock
+			List.of(primary, fallback), persistenceService, inMemoryExchangeRateService, clock
 		);
 	}
 
@@ -75,16 +82,17 @@ class ProviderFallbackExchangeRateCollectorTest {
 		void shouldSaveWhenPrimarySucceeds() {
 			// given
 			ProviderRate providerRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1350")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1350")
 			);
-			given(primary.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(providerRate);
+			given(primary.fetchRate(RatedCurrency.USD, Currency.KRW)).willReturn(providerRate);
 
 			// when
 			collector.collectAll();
 
 			// then
 			verify(persistenceService).saveIfValid(eq(providerRate), eq("PRIMARY"), any(LocalDateTime.class));
-			verify(fallback, never()).fetchRate(ForeignCurrency.USD, CurrencyCode.KRW);
+			verify(inMemoryExchangeRateService).update(eq(RatedCurrency.USD), any(ExchangeRateResponse.class));
+			verify(fallback, never()).fetchRate(RatedCurrency.USD, Currency.KRW);
 		}
 
 		@Test
@@ -92,17 +100,18 @@ class ProviderFallbackExchangeRateCollectorTest {
 		void shouldFallbackToSecondProviderWhenPrimaryFails() {
 			// given
 			ProviderRate fallbackRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1350")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1350")
 			);
-			given(primary.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			given(primary.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.willThrow(new RuntimeException("API 장애"));
-			given(fallback.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(fallbackRate);
+			given(fallback.fetchRate(RatedCurrency.USD, Currency.KRW)).willReturn(fallbackRate);
 
 			// when
 			collector.collectAll();
 
 			// then
 			verify(persistenceService).saveIfValid(eq(fallbackRate), eq("FALLBACK"), any(LocalDateTime.class));
+			verify(inMemoryExchangeRateService).update(eq(RatedCurrency.USD), any(ExchangeRateResponse.class));
 		}
 
 		@Test
@@ -110,17 +119,17 @@ class ProviderFallbackExchangeRateCollectorTest {
 		void shouldFallbackWhenPersistenceRejectsRate() {
 			// given
 			ProviderRate primaryRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1200")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1200")
 			);
 			ProviderRate fallbackRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1350")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1350")
 			);
-			given(primary.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(primaryRate);
-			given(fallback.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(fallbackRate);
+			given(primary.fetchRate(RatedCurrency.USD, Currency.KRW)).willReturn(primaryRate);
+			given(fallback.fetchRate(RatedCurrency.USD, Currency.KRW)).willReturn(fallbackRate);
 			given(persistenceService.saveIfValid(eq(primaryRate), eq("PRIMARY"), any()))
-				.willReturn(false);
+				.willReturn(Optional.empty());
 			given(persistenceService.saveIfValid(eq(fallbackRate), eq("FALLBACK"), any()))
-				.willReturn(true);
+				.willReturn(Optional.of(savedRate(RatedCurrency.USD)));
 
 			// when
 			collector.collectAll();
@@ -128,15 +137,16 @@ class ProviderFallbackExchangeRateCollectorTest {
 			// then
 			verify(persistenceService).saveIfValid(eq(primaryRate), eq("PRIMARY"), any(LocalDateTime.class));
 			verify(persistenceService).saveIfValid(eq(fallbackRate), eq("FALLBACK"), any(LocalDateTime.class));
+			verify(inMemoryExchangeRateService).update(eq(RatedCurrency.USD), any(ExchangeRateResponse.class));
 		}
 
 		@Test
 		@DisplayName("모든 Provider 실패 시 저장을 요청하지 않는다")
 		void shouldNotSaveWhenAllProvidersFail() {
 			// given
-			given(primary.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			given(primary.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.willThrow(new RuntimeException("1순위 실패"));
-			given(fallback.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW))
+			given(fallback.fetchRate(RatedCurrency.USD, Currency.KRW))
 				.willThrow(new RuntimeException("2순위 실패"));
 
 			// when
@@ -144,6 +154,7 @@ class ProviderFallbackExchangeRateCollectorTest {
 
 			// then
 			verify(persistenceService, never()).saveIfValid(any(), any(), any());
+			verify(inMemoryExchangeRateService, never()).update(any(), any());
 		}
 
 		@Test
@@ -151,17 +162,29 @@ class ProviderFallbackExchangeRateCollectorTest {
 		void shouldSkipProviderWhenNotSupported() {
 			// given
 			ProviderRate fallbackRate = new ProviderRate(
-				ForeignCurrency.USD, CurrencyCode.KRW, new BigDecimal("1350")
+				RatedCurrency.USD, Currency.KRW, new BigDecimal("1350")
 			);
-			given(primary.supports(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(false);
-			given(fallback.fetchRate(ForeignCurrency.USD, CurrencyCode.KRW)).willReturn(fallbackRate);
+			given(primary.supports(RatedCurrency.USD, Currency.KRW)).willReturn(false);
+			given(fallback.fetchRate(RatedCurrency.USD, Currency.KRW)).willReturn(fallbackRate);
 
 			// when
 			collector.collectAll();
 
 			// then
-			verify(primary, never()).fetchRate(ForeignCurrency.USD, CurrencyCode.KRW);
+			verify(primary, never()).fetchRate(RatedCurrency.USD, Currency.KRW);
 			verify(persistenceService).saveIfValid(eq(fallbackRate), eq("FALLBACK"), any(LocalDateTime.class));
+			verify(inMemoryExchangeRateService).update(eq(RatedCurrency.USD), any(ExchangeRateResponse.class));
 		}
+	}
+
+	private SavedExchangeRate savedRate(RatedCurrency currency) {
+		ExchangeRateResponse response = ExchangeRateResponse.builder()
+			.currencyCode(currency)
+			.tradeStanRate(new BigDecimal("1350.00"))
+			.buyRate(new BigDecimal("1417.50"))
+			.sellRate(new BigDecimal("1282.50"))
+			.dateTime(LocalDateTime.now())
+			.build();
+		return new SavedExchangeRate(currency, response);
 	}
 }
