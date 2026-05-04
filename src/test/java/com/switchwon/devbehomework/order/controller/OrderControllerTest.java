@@ -16,6 +16,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -149,8 +153,8 @@ class OrderControllerTest {
 	class GetOrders {
 
 		@Test
-		@DisplayName("주문 목록을 성공적으로 반환한다")
-		void shouldReturnOrderList() throws Exception {
+		@DisplayName("주문 목록을 페이징하여 반환한다")
+		void shouldReturnPagedOrderList() throws Exception {
 			// given
 			LocalDateTime now = LocalDateTime.now();
 			List<OrderResponse> orders = List.of(
@@ -161,7 +165,9 @@ class OrderControllerTest {
 					new BigDecimal("1417.50"), now
 				)
 			);
-			given(orderService.getOrders()).willReturn(OrderListResponse.from(orders));
+			PageImpl<OrderResponse> page = new PageImpl<>(orders,
+				PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")), 1);
+			given(orderService.getOrders(any(Pageable.class))).willReturn(OrderListResponse.from(page));
 
 			// when & then
 			mockMvc.perform(get("/order/list"))
@@ -169,19 +175,26 @@ class OrderControllerTest {
 				.andExpect(jsonPath("$.code").value("OK"))
 				.andExpect(jsonPath("$.returnObject.orderList").isArray())
 				.andExpect(jsonPath("$.returnObject.orderList[0].id").value(1))
-				.andExpect(jsonPath("$.returnObject.orderList[0].fromCurrency").value("KRW"));
+				.andExpect(jsonPath("$.returnObject.orderList[0].fromCurrency").value("KRW"))
+				.andExpect(jsonPath("$.returnObject.totalPages").value(1))
+				.andExpect(jsonPath("$.returnObject.totalElements").value(1))
+				.andExpect(jsonPath("$.returnObject.page").value(0))
+				.andExpect(jsonPath("$.returnObject.size").value(20));
 		}
 
 		@Test
 		@DisplayName("주문이 없으면 빈 목록을 반환한다")
 		void shouldReturnEmptyOrderList() throws Exception {
 			// given
-			given(orderService.getOrders()).willReturn(OrderListResponse.from(List.of()));
+			PageImpl<OrderResponse> emptyPage = new PageImpl<>(List.of(),
+				PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")), 0);
+			given(orderService.getOrders(any(Pageable.class))).willReturn(OrderListResponse.from(emptyPage));
 
 			// when & then
 			mockMvc.perform(get("/order/list"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.returnObject.orderList").isEmpty());
+				.andExpect(jsonPath("$.returnObject.orderList").isEmpty())
+				.andExpect(jsonPath("$.returnObject.totalElements").value(0));
 		}
 	}
 }

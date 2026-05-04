@@ -1,5 +1,8 @@
 package com.switchwon.devbehomework.order.controller;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,7 +31,9 @@ public class OrderController {
 	}
 
 	@GetMapping("/list")
-	public ApiResponse<OrderListResponse> getOrders() {
-		return ApiResponse.success(orderService.getOrders());
+	public ApiResponse<OrderListResponse> getOrders(
+		@PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+	) {
+		return ApiResponse.success(orderService.getOrders(pageable));
 	}
 }

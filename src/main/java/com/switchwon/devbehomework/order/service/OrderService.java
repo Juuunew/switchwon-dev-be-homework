@@ -87,7 +87,7 @@ public class OrderService {
 	}
 
 	public OrderListResponse getOrders(Pageable pageable) {
-		Page<OrderResponse> responses = orderRepository.findAllByOrderByCreatedAtDesc(pageable)
+		Page<OrderResponse> responses = orderRepository.findAll(pageable)
 			.map(this::toResponse);
 		return OrderListResponse.from(responses);
 	}

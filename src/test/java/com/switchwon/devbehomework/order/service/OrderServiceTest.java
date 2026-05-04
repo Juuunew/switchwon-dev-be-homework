@@ -273,7 +273,7 @@ class OrderServiceTest {
 		void shouldReturnEmptyPageWhenNoOrders() {
 			// given
 			Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
-			given(orderRepository.findAllByOrderByCreatedAtDesc(pageable))
+			given(orderRepository.findAll(pageable))
 				.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when

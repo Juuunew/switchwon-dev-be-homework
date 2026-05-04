@@ -1,4 +1,4 @@
-package com.switchwon.devbehomework.common.config;
+package com.switchwon.devbehomework.config;
 
 import java.time.Clock;
 import java.time.ZoneId;
