@@ -2,12 +2,12 @@ package com.switchwon.devbehomework.order.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
@@ -22,7 +22,6 @@ import com.switchwon.devbehomework.order.entity.ExchangeOrderEntity;
 import com.switchwon.devbehomework.order.entity.ExchangeOrderRequestEntity;
 import com.switchwon.devbehomework.order.enums.OrderDirection;
 import com.switchwon.devbehomework.order.repository.ExchangeOrderRepository;
-import com.switchwon.devbehomework.order.repository.ExchangeOrderRequestRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,10 +32,9 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class OrderService {
 
-	private final ExchangeOrderRequestRepository requestRepository;
 	private final ExchangeOrderRepository orderRepository;
 	private final ExchangeRateService exchangeRateService;
-	private final TransactionTemplate requiresNewTransactionTemplate;
+	private final OrderTransactionService orderTransactionService;
 	private final Clock clock;
 
 	@Value("${exchange-rate.rate-freshness-minutes:5}")
@@ -45,65 +43,52 @@ public class OrderService {
 	public OrderResponse createOrder(OrderRequest request) {
 		LocalDateTime now = LocalDateTime.now(clock);
 
-		ExchangeOrderRequestEntity orderRequest = requiresNewTransactionTemplate.execute(status ->
-			requestRepository.save(ExchangeOrderRequestEntity.received(
+		ExchangeOrderRequestEntity orderRequest = orderTransactionService.saveRequest(
+			ExchangeOrderRequestEntity.received(
 				request.getForexAmount(), request.getFromCurrency(), request.getToCurrency(), now
-			))
+			)
 		);
 
 		try {
-			return requiresNewTransactionTemplate.execute(status -> {
-				CurrencyCode fromCurrency = parseCurrency(request.getFromCurrency());
-				CurrencyCode toCurrency = parseCurrency(request.getToCurrency());
-				validateCurrencyPair(fromCurrency, toCurrency);
+			CurrencyCode fromCurrency = parseCurrency(request.getFromCurrency());
+			CurrencyCode toCurrency = parseCurrency(request.getToCurrency());
+			validateCurrencyPair(fromCurrency, toCurrency);
 
-				boolean isBuy = fromCurrency == CurrencyCode.KRW;
-				ForeignCurrency foreignCurrency = ForeignCurrency.valueOf(
-					isBuy ? toCurrency.name() : fromCurrency.name()
-				);
+			boolean isBuy = fromCurrency == CurrencyCode.KRW;
+			ForeignCurrency foreignCurrency = ForeignCurrency.from(
+				isBuy ? toCurrency : fromCurrency
+			);
 
-				ExchangeRateResponse rate = exchangeRateService.getLatestRate(foreignCurrency);
+			ExchangeRateResponse rate = exchangeRateService.getLatestRate(foreignCurrency);
 
-				if (rate.dateTime().plusMinutes(rateFreshnessMinutes).isBefore(now)) {
-					throw new BusinessException(ErrorCode.RATE_STALE);
-				}
+			if (rate.dateTime().plusMinutes(rateFreshnessMinutes).isBefore(now)) {
+				throw new BusinessException(ErrorCode.RATE_STALE);
+			}
 
-				OrderDirection direction = isBuy ? OrderDirection.BUY : OrderDirection.SELL;
-				ExchangeOrderEntity order = ExchangeOrderEntity.create(
-					orderRequest.getId(), direction, foreignCurrency, request.getForexAmount(), rate, now
-				);
-				orderRepository.save(order);
+			OrderDirection direction = isBuy ? OrderDirection.BUY : OrderDirection.SELL;
+			ExchangeOrderEntity order = ExchangeOrderEntity.create(
+				orderRequest.getId(), direction, foreignCurrency, request.getForexAmount(), rate, now
+			);
 
-				orderRequest.markSucceeded(LocalDateTime.now(clock));
-				requestRepository.save(orderRequest);
+			orderRequest.markSucceeded(LocalDateTime.now(clock));
+			orderTransactionService.saveOrder(order, orderRequest);
 
-				log.info("주문 완료: direction={}, currency={}, forexAmount={}, tradeRate={}",
-					direction, foreignCurrency, request.getForexAmount(), order.getTradeRate());
+			log.info("주문 완료: direction={}, currency={}, forexAmount={}, tradeRate={}",
+				direction, foreignCurrency, request.getForexAmount(), order.getTradeRate());
 
-				return toResponse(order);
-			});
+			return toResponse(order);
 		} catch (BusinessException e) {
-			requiresNewTransactionTemplate.execute(status -> {
-				orderRequest.markFailed(e.getErrorCode(), LocalDateTime.now(clock));
-				requestRepository.save(orderRequest);
-				return null;
-			});
+			orderTransactionService.markFailed(orderRequest, e.getErrorCode(), LocalDateTime.now(clock));
 			throw e;
 		} catch (RuntimeException e) {
-			requiresNewTransactionTemplate.execute(status -> {
-				orderRequest.markFailed(ErrorCode.INTERNAL_ERROR, LocalDateTime.now(clock));
-				requestRepository.save(orderRequest);
-				return null;
-			});
+			orderTransactionService.markFailed(orderRequest, ErrorCode.INTERNAL_ERROR, LocalDateTime.now(clock));
 			throw e;
 		}
 	}
 
-	public OrderListResponse getOrders() {
-		List<ExchangeOrderEntity> orders = orderRepository.findAllByOrderByCreatedAtDesc();
-		List<OrderResponse> responses = orders.stream()
-			.map(this::toResponse)
-			.toList();
+	public OrderListResponse getOrders(Pageable pageable) {
+		Page<OrderResponse> responses = orderRepository.findAllByOrderByCreatedAtDesc(pageable)
+			.map(this::toResponse);
 		return OrderListResponse.from(responses);
 	}
 

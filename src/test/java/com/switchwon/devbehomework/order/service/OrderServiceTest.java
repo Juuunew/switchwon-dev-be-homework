@@ -4,13 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -18,14 +18,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.support.TransactionCallback;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 import com.switchwon.devbehomework.common.exception.BusinessException;
@@ -38,7 +42,6 @@ import com.switchwon.devbehomework.order.dto.OrderResponse;
 import com.switchwon.devbehomework.order.entity.ExchangeOrderEntity;
 import com.switchwon.devbehomework.order.entity.ExchangeOrderRequestEntity;
 import com.switchwon.devbehomework.order.repository.ExchangeOrderRepository;
-import com.switchwon.devbehomework.order.repository.ExchangeOrderRequestRepository;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -49,16 +52,13 @@ class OrderServiceTest {
 	private OrderService orderService;
 
 	@Mock
-	private ExchangeOrderRequestRepository requestRepository;
-
-	@Mock
 	private ExchangeOrderRepository orderRepository;
 
 	@Mock
 	private ExchangeRateService exchangeRateService;
 
 	@Mock
-	private TransactionTemplate requiresNewTransactionTemplate;
+	private OrderTransactionService orderTransactionService;
 
 	@Mock
 	private Clock clock;
@@ -68,11 +68,9 @@ class OrderServiceTest {
 		ReflectionTestUtils.setField(orderService, "rateFreshnessMinutes", 5);
 		given(clock.instant()).willReturn(Instant.now());
 		given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
-		given(requiresNewTransactionTemplate.execute(any()))
-			.willAnswer(inv -> ((TransactionCallback<?>)inv.getArgument(0)).doInTransaction(null));
-		given(requestRepository.save(any(ExchangeOrderRequestEntity.class)))
+		given(orderTransactionService.saveRequest(any(ExchangeOrderRequestEntity.class)))
 			.willAnswer(inv -> inv.getArgument(0));
-		given(orderRepository.save(any(ExchangeOrderEntity.class)))
+		given(orderTransactionService.saveOrder(any(ExchangeOrderEntity.class), any(ExchangeOrderRequestEntity.class)))
 			.willAnswer(inv -> inv.getArgument(0));
 	}
 
@@ -240,8 +238,8 @@ class OrderServiceTest {
 	class CreateOrderAudit {
 
 		@Test
-		@DisplayName("주문 실패 시 요청 상태가 RECEIVED → FAILED 순으로 저장된다")
-		void shouldSaveReceivedThenFailedWhenOrderFails() {
+		@DisplayName("주문 실패 시 markFailed가 호출된다")
+		void shouldCallMarkFailedWhenOrderFails() {
 			// given: 10분 전 환율로 RATE_STALE 유발
 			OrderRequest request = new OrderRequest(new BigDecimal("100"), "KRW", "USD");
 			ExchangeRateResponse staleRate = ExchangeRateResponse.builder()
@@ -253,21 +251,16 @@ class OrderServiceTest {
 				.build();
 			given(exchangeRateService.getLatestRate(ForeignCurrency.USD)).willReturn(staleRate);
 
-			List<String> savedStatuses = new ArrayList<>();
-			given(requestRepository.save(any(ExchangeOrderRequestEntity.class)))
-				.willAnswer(inv -> {
-					ExchangeOrderRequestEntity entity = inv.getArgument(0);
-					savedStatuses.add(entity.getStatus().name());
-					return entity;
-				});
-
 			// when & then
 			assertThatThrownBy(() -> orderService.createOrder(request))
 				.isInstanceOf(BusinessException.class)
 				.extracting(ex -> ((BusinessException)ex).getErrorCode())
 				.isEqualTo(ErrorCode.RATE_STALE);
 
-			assertThat(savedStatuses).containsExactly("RECEIVED", "FAILED");
+			ArgumentCaptor<ErrorCode> errorCodeCaptor = ArgumentCaptor.forClass(ErrorCode.class);
+			verify(orderTransactionService).markFailed(
+				any(ExchangeOrderRequestEntity.class), errorCodeCaptor.capture(), any(LocalDateTime.class));
+			assertThat(errorCodeCaptor.getValue()).isEqualTo(ErrorCode.RATE_STALE);
 		}
 	}
 
@@ -276,16 +269,22 @@ class OrderServiceTest {
 	class GetOrders {
 
 		@Test
-		@DisplayName("주문이 없으면 빈 목록을 반환한다")
-		void shouldReturnEmptyListWhenNoOrders() {
+		@DisplayName("주문이 없으면 빈 페이지를 반환한다")
+		void shouldReturnEmptyPageWhenNoOrders() {
 			// given
-			given(orderRepository.findAllByOrderByCreatedAtDesc()).willReturn(java.util.List.of());
+			Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+			given(orderRepository.findAllByOrderByCreatedAtDesc(pageable))
+				.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			OrderListResponse response = orderService.getOrders();
+			OrderListResponse response = orderService.getOrders(pageable);
 
 			// then
 			assertThat(response.orderList()).isEmpty();
+			assertThat(response.totalElements()).isZero();
+			assertThat(response.totalPages()).isZero();
+			assertThat(response.page()).isZero();
+			assertThat(response.size()).isEqualTo(20);
 		}
 	}
 }
