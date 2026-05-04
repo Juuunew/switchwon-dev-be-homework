@@ -99,6 +99,21 @@ class OrderControllerTest {
 		}
 
 		@Test
+		@DisplayName("forexAmount의 소수부가 2자리를 초과하면 400 에러를 반환한다")
+		void shouldReturn400WhenForexAmountScaleExceedsTwo() throws Exception {
+			// given
+			String requestBody = "{\"forexAmount\":100.123,\"fromCurrency\":\"KRW\",\"toCurrency\":\"USD\"}";
+
+			// when & then
+			mockMvc.perform(post("/order")
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(requestBody))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("400"))
+				.andExpect(jsonPath("$.message").value("거래 금액은 정수부 17자리, 소수부 2자리까지 입력 가능합니다."));
+		}
+
+		@Test
 		@DisplayName("fromCurrency가 빈 값이면 400 에러를 반환한다")
 		void shouldReturn400WhenFromCurrencyIsBlank() throws Exception {
 			// given
@@ -110,6 +125,22 @@ class OrderControllerTest {
 					.content(requestBody))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("400"));
+		}
+
+		@Test
+		@DisplayName("예상하지 못한 예외 발생 시 공통 500 응답을 반환한다")
+		void shouldReturn500WhenUnexpectedExceptionOccurs() throws Exception {
+			// given
+			given(orderService.createOrder(any())).willThrow(new RuntimeException("unexpected"));
+			String requestBody = "{\"forexAmount\":100,\"fromCurrency\":\"KRW\",\"toCurrency\":\"USD\"}";
+
+			// when & then
+			mockMvc.perform(post("/order")
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(requestBody))
+				.andExpect(status().isInternalServerError())
+				.andExpect(jsonPath("$.code").value("500"))
+				.andExpect(jsonPath("$.message").value("서버 내부 오류가 발생했습니다."));
 		}
 	}
 

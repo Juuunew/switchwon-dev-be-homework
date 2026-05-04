@@ -11,6 +11,9 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import com.switchwon.devbehomework.common.dto.ApiResponse;
 import com.switchwon.devbehomework.common.enums.ErrorCode;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -19,7 +22,7 @@ public class GlobalExceptionHandler {
 		ErrorCode errorCode = ex.getErrorCode();
 		return ResponseEntity
 			.status(errorCode.getCode())
-			.body(ApiResponse.error(String.valueOf(errorCode.getCode()), errorCode.getMessage()));
+			.body(ApiResponse.error(errorCode));
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
@@ -30,7 +33,7 @@ public class GlobalExceptionHandler {
 			.orElse("잘못된 요청입니다.");
 		return ResponseEntity
 			.badRequest()
-			.body(ApiResponse.error("400", message));
+			.body(ApiResponse.error(ErrorCode.INVALID_REQUEST, message));
 	}
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)
@@ -38,7 +41,7 @@ public class GlobalExceptionHandler {
 		HttpMessageNotReadableException ex) {
 		return ResponseEntity
 			.badRequest()
-			.body(ApiResponse.error("400", "잘못된 요청 형식입니다."));
+			.body(ApiResponse.error(ErrorCode.INVALID_REQUEST, "잘못된 요청 형식입니다."));
 	}
 
 	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
@@ -46,6 +49,15 @@ public class GlobalExceptionHandler {
 		MethodArgumentTypeMismatchException ex) {
 		return ResponseEntity
 			.badRequest()
-			.body(ApiResponse.error("400", "잘못된 요청 형식입니다."));
+			.body(ApiResponse.error(ErrorCode.INVALID_REQUEST, "잘못된 요청 형식입니다."));
+	}
+
+	@ExceptionHandler(Exception.class)
+	public ResponseEntity<ApiResponse<Void>> handleUnhandledException(Exception ex) {
+		log.error("처리되지 않은 예외가 발생했습니다.", ex);
+		ErrorCode errorCode = ErrorCode.INTERNAL_ERROR;
+		return ResponseEntity
+			.status(errorCode.getCode())
+			.body(ApiResponse.error(errorCode));
 	}
 }
